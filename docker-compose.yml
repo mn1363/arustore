@@ -1,0 +1,226 @@
+# Update docker-compose.yml to remove version warning
+@"
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: arustore-postgres
+    environment:
+      POSTGRES_USER: aruadmin
+      POSTGRES_PASSWORD: securepassword123
+      POSTGRES_DB: arustore
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aruadmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: arustore-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass redispassword123
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "redispassword123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: arustore-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=50s"]
+      interval: 30s
+      timeout: 20s
+      retries: 10
+    networks:
+      - arustore-network
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  minio:
+    image: minio/minio:latest
+    container_name: arustore-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: arustore-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: aruuser
+      RABBITMQ_DEFAULT_PASS: arupassword123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arustore-backend
+    environment:
+      - DATABASE_URL=postgresql://aruadmin:securepassword123@postgres:5432/arustore
+      - REDIS_URL=redis://:redispassword123@redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - CELERY_BROKER_URL=amqp://aruuser:arupassword123@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://:redispassword123@redis:6379/1
+      - SECRET_KEY=your-super-secret-key-change-this-in-production
+      - CORS_ORIGINS=["http://localhost:3000"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arustore-celery-worker
+    environment:
+      - DATABASE_URL=postgresql://aruadmin:securepassword123@postgres:5432/arustore
+      - REDIS_URL=redis://:redispassword123@redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - CELERY_BROKER_URL=amqp://aruuser:arupassword123@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://:redispassword123@redis:6379/1
+    depends_on:
+      - rabbitmq
+      - redis
+      - postgres
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arustore-celery-beat
+    environment:
+      - DATABASE_URL=postgresql://aruadmin:securepassword123@postgres:5432/arustore
+      - REDIS_URL=redis://:redispassword123@redis:6379/0
+      - CELERY_BROKER_URL=amqp://aruuser:arupassword123@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://:redispassword123@redis:6379/1
+    depends_on:
+      - rabbitmq
+      - redis
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app beat --loglevel=info
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: arustore-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    networks:
+      - arustore-network
+    restart: unless-stopped
+
+networks:
+  arustore-network:
+    driver: bridge
+    name: arustore-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  es_data:
+    driver: local
+  minio_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+"@ | Out-File -FilePath "docker-compose.yml" -Encoding UTF8

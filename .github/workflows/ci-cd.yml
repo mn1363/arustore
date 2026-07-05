@@ -1,0 +1,64 @@
+name: Arustore CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  # ۱. بخش تست و بررسی کدهای بک‌اند
+  backend-testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # یا هر نسخه‌ای که در پروژه استفاده می‌کنید
+
+      - name: Install Dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pytest
+        run: |
+          cd backend
+          pytest # تمام تست‌های بک‌اند را به صورت خودکار اجرا می‌کند
+
+  # ۲. بخش لِینت و بیلد فرانت‌اند
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # نسخه نود جی‌اس پروژه شما
+
+      - name: Install Dependencies
+        run: |
+          cd frontend
+          npm ci # نصب پکیج‌ها به صورت تمیز و بدون تغییر package-lock
+
+      - name: Next.js Build Test
+        run: |
+          cd frontend
+          npm run build # مطمئن می‌شود که فرانت‌اند بدون ارور کامپایل می‌شود
+
+  # ۳. بخش تست بیلد داکر (DevOps)
+  docker-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify Docker Compose Build
+        run: |
+          docker compose -f docker-compose.yml config # ساختار فایل داکر را اعتبارسنجی می‌کند

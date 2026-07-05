@@ -1,0 +1,14 @@
+﻿/node_modules
+/.next
+/out
+/dist
+/build
+*.node
+*.wasm
+*.pack.gz
+*.map
+0.pack.gz
+1.pack.gz
+next-swc.win32-x64-msvc.node
+.env
+.DS_Store
