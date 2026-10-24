@@ -10,6 +10,14 @@ from app.utils.validators import normalize_iran_phone, normalize_sku, validate_p
 
 
 async def test_health_endpoint(client: AsyncClient) -> None:
+    root_json = await client.get("/", headers={"Accept": "application/json"})
+    assert root_json.status_code == 200
+    assert root_json.json()["api_v1"] == "/api/v1"
+
+    root_html = await client.get("/", headers={"Accept": "text/html"})
+    assert root_html.status_code == 200
+    assert "AruStore FastAPI v1" in root_html.text
+
     res = await client.get("/health")
     assert res.status_code == 200
     body = res.json()
