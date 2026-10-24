@@ -10,32 +10,38 @@ export function AruLogo3D({ className = 'w-9 h-9' }: { className?: string }) {
         viewBox="0 0 64 64"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="w-full h-full drop-shadow-[0_0_16px_rgba(245,158,11,0.45)]"
+        className="w-full h-full"
       >
         <defs>
-          <linearGradient id="aluSilverTop" x1="10" y1="6" x2="54" y2="32" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#FFFFFF" />
-            <stop offset="0.55" stopColor="#CBD5E1" />
-            <stop offset="1" stopColor="#94A3B8" />
+          <linearGradient id="aruBrushedAlu" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#F5F3EE" />
+            <stop offset="0.52" stopColor="#BFC4CA" />
+            <stop offset="1" stopColor="#7C828A" />
           </linearGradient>
-          <linearGradient id="aluSilverSide" x1="8" y1="20" x2="32" y2="58" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#94A3B8" />
-            <stop offset="1" stopColor="#334155" />
-          </linearGradient>
-          <linearGradient id="aluGoldSide" x1="56" y1="18" x2="32" y2="58" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#FDE68A" />
-            <stop offset="0.5" stopColor="#F59E0B" />
-            <stop offset="1" stopColor="#92400E" />
+          <linearGradient id="aruSatinBronze" x1="16" y1="12" x2="48" y2="58" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#E5C899" />
+            <stop offset="0.55" stopColor="#C59B5F" />
+            <stop offset="1" stopColor="#7D5A2B" />
           </linearGradient>
         </defs>
-        {/* Sculpted Pedestal Chalice / Metallic Prism Emblem */}
-        <polygon points="32,5 56,19 32,31 8,19" fill="url(#aluSilverTop)" />
-        <polygon points="8,19 32,31 32,45 14,34" fill="url(#aluSilverSide)" />
-        <polygon points="56,19 50,34 32,45 32,31" fill="url(#aluGoldSide)" />
-        {/* Pedestal Foot */}
-        <polygon points="32,44 46,54 32,60 18,54" fill="url(#aluGoldSide)" />
-        {/* Inner Champagne Crown Finial */}
-        <circle cx="32" cy="18" r="5" fill="#FDE68A" />
+        {/* Outer Engraved Octagonal / Arch Seal */}
+        <path
+          d="M32 4C46 4 56 14 56 28V58H8V28C8 14 18 4 32 4Z"
+          stroke="url(#aruSatinBronze)"
+          strokeWidth="1.75"
+          fill="rgba(23,21,18,0.85)"
+        />
+        {/* Lathe-Turned Pedestal Bowl Silhouette */}
+        <path
+          d="M16 26H48C46.5 35.5 40.5 40.5 32 40.5C23.5 40.5 17.5 35.5 16 26Z"
+          fill="url(#aruBrushedAlu)"
+        />
+        {/* Satin Bronze Rim & Stem */}
+        <rect x="14" y="23.5" width="36" height="2.4" fill="url(#aruSatinBronze)" />
+        <rect x="30.2" y="40.5" width="3.6" height="9.5" fill="url(#aruSatinBronze)" />
+        <path d="M22 52.5L32 49.5L42 52.5H22Z" fill="url(#aruBrushedAlu)" />
+        {/* Crown Finial */}
+        <path d="M32 13L35.2 18.5L32 21.5L28.8 18.5L32 13Z" fill="url(#aruSatinBronze)" />
       </svg>
     </div>
   )

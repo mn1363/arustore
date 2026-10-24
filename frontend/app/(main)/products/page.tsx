@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { LayoutGrid, List, Sparkles } from 'lucide-react'
+import { LayoutGrid, List } from 'lucide-react'
 import Breadcrumb from '@/components/layout/Breadcrumb'
 import Sidebar from '@/components/layout/Sidebar'
 import BrandFilter from '@/components/filters/BrandFilter'
@@ -72,74 +72,74 @@ function ProductsCatalogContent() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <Breadcrumb
         items={[
-          { label: locale === 'fa' ? 'فروشگاه سه‌بعدی' : '3D Store' },
+          { label: locale === 'fa' ? 'آثار و ظروف' : 'Objects' },
         ]}
       />
 
-      {/* Catalog Hero Header */}
-      <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-20 bg-cover bg-center"
-          style={{ backgroundImage: 'url(/images/banners/hero-aluminum-atelier.png)' }}
-        />
-        <div className="relative z-10 space-y-2">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>
-              {locale === 'fa'
-                ? 'کاتالوگ سه‌بعدی تولیدات ظروف پذیرایی آلومینیومی'
-                : 'INTERACTIVE 360° ALUMINUM SERVINGWARE GALLERY'}
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-4xl font-black text-white">
-            {locale === 'fa' ? 'گالری ظروف پذیرایی آلومینیومی آرو' : 'AruStore Aluminum Servingware'}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl">
+      {/* Editorial Catalog Masthead */}
+      <div className="border-b border-[#ece6dc]/15 pb-7 flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
+        <div className="space-y-2">
+          <div className="font-mono text-[10px] tracking-[0.22em] text-[#c59b5f] uppercase">
             {locale === 'fa'
-              ? 'روی هر کارت حرکت کنید تا پرسپکتیو سه‌بعدی را حس کنید یا با کلیک روی آیکون مکعب، مدل سه‌بعدی ظرف را ۳۶۰ درجه بچرخانید و رنگ آبکاری را تغییر دهید.'
-              : 'Hover any piece for spatial 3D tilt or launch the 360° WebGL inspector to test anodized finishes.'}
+              ? 'دفتر کل آثار // ریخته‌گری و آنودایز آلومینیوم'
+              : 'COMPLETE OBJECT ARCHIVE // 360° CAD'}
+          </div>
+          <h1 className="font-editorial text-4xl sm:text-6xl font-bold text-[#f7f4ee]">
+            {locale === 'fa' ? 'تالار ظروف پذیرایی آلومینیومی آرو' : 'AruStore Cast-Aluminum Archive'}
+          </h1>
+          <p className="text-xs sm:text-sm text-[#9e9589] max-w-2xl leading-relaxed">
+            {locale === 'fa'
+              ? 'هر ظرف دارای شناسنامه آلیاژ، انتخاب پوشش آنودایز و میز گردان سه‌بعدی ۳۶۰ درجه است.'
+              : 'Every vessel carries an alloy specification sheet, anodize finish selector, and 360° rotary inspection.'}
           </p>
         </div>
 
-        <div className="relative z-10 glass-pill px-4 py-2.5 rounded-2xl text-xs text-slate-300">
-          <span className="font-extrabold text-amber-300 text-base me-1.5">
+        <div className="border border-[#ece6dc]/16 bg-[#161411] px-4 py-2.5 text-xs text-[#b9b0a2] font-mono">
+          <span className="font-bold text-[#dfc08e] text-base me-1.5">
             {formatNumber(total, locale)}
           </span>
-          {locale === 'fa' ? 'مدل آماده ارسال از کارخانه' : 'creations available'}
+          {locale === 'fa' ? 'اثر آماده تحویل' : 'OBJECTS'}
         </div>
       </div>
 
-      {/* Category Quick Filter Strip */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      {/* Architectural Underline Category Tabs */}
+      <div className="flex items-center gap-6 overflow-x-auto border-b border-[#ece6dc]/12">
         <button
           onClick={() => {
             setCategorySlug('all')
             setPage(1)
           }}
-          className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+          className={`pb-3 text-xs sm:text-sm font-bold whitespace-nowrap transition-colors relative ${
             categorySlug === 'all'
-              ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-neon-cyan'
-              : 'glass-panel border-white/10 text-slate-300 hover:text-white'
+              ? 'text-[#f7f4ee]'
+              : 'text-[#8c8377] hover:text-[#d6cfc4]'
           }`}
         >
-          {locale === 'fa' ? 'همه دسته‌ها' : 'All Categories'}
+          <span>{locale === 'fa' ? 'تمامی آثار' : 'All Objects'}</span>
+          {categorySlug === 'all' && (
+            <span className="absolute bottom-0 inset-x-0 h-[2px] bg-[#c59b5f]" />
+          )}
         </button>
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => {
-              setCategorySlug(cat.slug)
-              setPage(1)
-            }}
-            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
-              categorySlug === cat.slug
-                ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-neon-cyan'
-                : 'glass-panel border-white/10 text-slate-300 hover:text-white'
-            }`}
-          >
-            {locale === 'fa' ? cat.name_fa : cat.name}
-          </button>
-        ))}
+        {CATEGORIES.map((cat) => {
+          const active = categorySlug === cat.slug
+          return (
+            <button
+              key={cat.id}
+              onClick={() => {
+                setCategorySlug(cat.slug)
+                setPage(1)
+              }}
+              className={`pb-3 text-xs sm:text-sm font-bold whitespace-nowrap transition-colors relative ${
+                active ? 'text-[#f7f4ee]' : 'text-[#8c8377] hover:text-[#d6cfc4]'
+              }`}
+            >
+              <span>{locale === 'fa' ? cat.name_fa : cat.name}</span>
+              {active && (
+                <span className="absolute bottom-0 inset-x-0 h-[2px] bg-[#c59b5f]" />
+              )}
+            </button>
+          )
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -174,9 +174,9 @@ function ProductsCatalogContent() {
               }}
             />
 
-            <label className="flex items-center justify-between cursor-pointer pt-2 border-t border-white/10">
-              <span className="text-xs font-semibold text-slate-300">
-                {locale === 'fa' ? 'فقط محصولات تخفیف‌دار' : 'Special Offers Only'}
+            <label className="flex items-center justify-between cursor-pointer pt-2 border-t border-[#ece6dc]/10">
+              <span className="text-xs font-medium text-[#c9c0b3]">
+                {locale === 'fa' ? 'فقط شرایط ویژه کارگاه' : 'Special Allocation Only'}
               </span>
               <input
                 type="checkbox"
@@ -185,7 +185,7 @@ function ProductsCatalogContent() {
                   setPage(1)
                   setOnlyOnSale(e.target.checked)
                 }}
-                className="w-4 h-4 accent-amber-400 rounded"
+                className="w-4 h-4 accent-[#c59b5f]"
               />
             </label>
           </Sidebar>
@@ -193,8 +193,7 @@ function ProductsCatalogContent() {
 
         {/* Main Products Column */}
         <div className="lg:col-span-9 space-y-6">
-          {/* Toolbar */}
-          <div className="glass-panel rounded-2xl p-3 border border-white/10 flex flex-wrap items-center justify-between gap-3">
+          <div className="border border-[#ece6dc]/14 bg-[#161411] p-3 flex flex-wrap items-center justify-between gap-3">
             <SearchBar
               value={search}
               onChange={(val) => {
@@ -207,38 +206,38 @@ function ProductsCatalogContent() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                className="rounded-xl bg-obsidian-900 border border-white/10 px-3.5 py-2.5 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber-400"
+                className="bg-[#11100e] border border-[#ece6dc]/16 px-3.5 py-2.5 text-xs font-medium text-[#e6dfd3] focus:outline-none focus:border-[#c59b5f]"
               >
                 <option value="featured">
-                  {locale === 'fa' ? 'مرتب‌سازی: منتخب استودیو' : 'Sort: Featured'}
+                  {locale === 'fa' ? 'چیدمان: برگزیده تالار' : 'Sort: Curated'}
                 </option>
                 <option value="newest">
-                  {locale === 'fa' ? 'جدیدترین پرچمدارها' : 'Sort: Newest'}
+                  {locale === 'fa' ? 'جدیدترین قالب‌ها' : 'Sort: Newest'}
                 </option>
                 <option value="rating">
-                  {locale === 'fa' ? 'بالاترین امتیاز کاربران' : 'Sort: Top Rated'}
+                  {locale === 'fa' ? 'بالاترین رضایت خریداران' : 'Sort: Highest Rated'}
                 </option>
                 <option value="price-asc">
-                  {locale === 'fa' ? 'ارزان‌ترین به گران‌ترین' : 'Price: Low to High'}
+                  {locale === 'fa' ? 'قیمت: کم به زیاد' : 'Price: Low to High'}
                 </option>
                 <option value="price-desc">
-                  {locale === 'fa' ? 'گران‌ترین به ارزان‌ترین' : 'Price: High to Low'}
+                  {locale === 'fa' ? 'قیمت: زیاد به کم' : 'Price: High to Low'}
                 </option>
               </select>
 
-              <div className="hidden sm:flex items-center p-1 rounded-xl bg-obsidian-900 border border-white/10">
+              <div className="hidden sm:flex items-center border border-[#ece6dc]/16 bg-[#11100e]">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-lg ${
-                    viewMode === 'grid' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400'
+                  className={`p-2 ${
+                    viewMode === 'grid' ? 'bg-[#c59b5f] text-[#11100e]' : 'text-[#9e9589]'
                   }`}
                 >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-2 rounded-lg ${
-                    viewMode === 'list' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400'
+                  className={`p-2 ${
+                    viewMode === 'list' ? 'bg-[#c59b5f] text-[#11100e]' : 'text-[#9e9589]'
                   }`}
                 >
                   <List className="w-4 h-4" />
@@ -248,29 +247,39 @@ function ProductsCatalogContent() {
           </div>
 
           {paginated.length === 0 ? (
-            <div className="glass-panel rounded-3xl p-12 text-center space-y-4 border border-white/10">
-              <p className="text-base font-bold text-white">
+            <div className="border border-[#ece6dc]/14 bg-[#161411] p-12 text-center space-y-4">
+              <p className="font-editorial text-2xl font-bold text-[#f7f4ee]">
                 {locale === 'fa'
-                  ? 'محصولی با این فیلترها پیدا نشد'
-                  : 'No creations matched your filters'}
+                  ? 'اثری با این مشخصات یافت نشد'
+                  : 'No objects matched your selection'}
               </p>
               <button
                 onClick={handleReset}
-                className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
+                className="px-5 py-2.5 rounded-[2px] satin-brass-btn font-bold text-xs"
               >
-                {locale === 'fa' ? 'نمایش همه محصولات' : 'Reset All Filters'}
+                {locale === 'fa' ? 'بازنشانی فیلترها' : 'Reset Filters'}
               </button>
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {paginated.map((product) => (
-                <ProductCard key={product.id} product={product} variant="grid" />
+              {paginated.map((product, idx) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  variant="grid"
+                  indexNumber={(page - 1) * pageSize + idx}
+                />
               ))}
             </div>
           ) : (
             <div className="space-y-4">
-              {paginated.map((product) => (
-                <ProductCard key={product.id} product={product} variant="list" />
+              {paginated.map((product, idx) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  variant="list"
+                  indexNumber={(page - 1) * pageSize + idx}
+                />
               ))}
             </div>
           )}

@@ -2,9 +2,8 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 import Breadcrumb from '@/components/layout/Breadcrumb'
-import Card3DTilt from '@/components/ui/Card3DTilt'
 import { CATEGORIES } from '@/lib/data/catalog'
 import { useStore } from '@/lib/store/useStore'
 import { formatNumber } from '@/lib/utils'
@@ -16,66 +15,62 @@ export default function CategoriesPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
       <Breadcrumb
-        items={[{ label: locale === 'fa' ? 'دسته‌بندی‌های سه‌بعدی' : '3D Categories' }]}
+        items={[{ label: locale === 'fa' ? 'مجموعه‌های تخصصی' : 'Collections' }]}
       />
 
-      <div className="space-y-2 max-w-2xl">
-        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>{locale === 'fa' ? 'جهان‌های تخصصی آرو استور' : 'CURATED WORLDS'}</span>
+      <div className="border-b border-[#ece6dc]/14 pb-6 space-y-2 max-w-3xl">
+        <div className="font-mono text-[10px] tracking-[0.22em] text-[#c59b5f] uppercase">
+          {locale === 'fa' ? 'فهرست تالارهای چهارگانه آرو' : 'ARCHITECTURAL CHAMBERS I — IV'}
         </div>
-        <h1 className="text-3xl sm:text-4xl font-black text-white">
+        <h1 className="font-editorial text-4xl sm:text-6xl font-bold text-[#f7f4ee]">
           {locale === 'fa'
-            ? 'دسته‌بندی محصولات در فضای سه‌بعدی'
-            : 'Explore Spatial Product Worlds'}
+            ? 'چهار مجموعه تخصصی ظروف پذیرایی آلومینیومی'
+            : 'Four Cast-Aluminum Servingware Collections'}
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {CATEGORIES.map((cat) => (
-          <Link key={cat.id} href={`/products?category=${cat.slug}`}>
-            <Card3DTilt
-              glowColor={`${cat.accent}35`}
-              className="glass-panel rounded-[2.2rem] p-8 border border-white/10 hover:border-amber-400/40 flex flex-col sm:flex-row items-center gap-6 group overflow-hidden h-full"
-            >
-              <div
-                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${cat.gradient} opacity-65 group-hover:opacity-100 transition-opacity`}
-              />
+      <div className="border border-[#ece6dc]/15 divide-y divide-[#ece6dc]/14 bg-[#141210]">
+        {CATEGORIES.map((cat, idx) => (
+          <Link
+            key={cat.id}
+            href={`/products?category=${cat.slug}`}
+            className="grid grid-cols-1 md:grid-cols-12 items-center gap-8 p-6 sm:p-10 hover:bg-[#1a1714] transition-colors group"
+          >
+            <div className="md:col-span-2 flex md:flex-col justify-between gap-2">
+              <span className="font-editorial text-5xl sm:text-6xl font-bold text-[#c59b5f]/85 leading-none">
+                {locale === 'fa' ? `۰${idx + 1}` : `0${idx + 1}`}
+              </span>
+              <span className="font-mono text-[10px] tracking-widest text-[#8c8377] uppercase">
+                {formatNumber(cat.product_count, locale)}{' '}
+                {locale === 'fa' ? 'اثر ثبت‌شده' : 'OBJECTS'}
+              </span>
+            </div>
 
-              <div className="relative z-10 w-44 h-44 flex-shrink-0 flex items-center justify-center translate-z-20">
+            <div className="md:col-span-4 flex justify-center">
+              <div className="relative w-48 h-44 flex items-center justify-center">
+                <div className="pointer-events-none absolute inset-x-4 top-2 bottom-0 arch-niche border border-[#ece6dc]/10 bg-[#100f0d] group-hover:border-[#c59b5f]/40 transition-colors" />
                 <img
                   src={cat.image}
                   alt={cat.name}
-                  className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_24px_36px_rgba(0,0,0,0.85)]"
+                  className="relative z-10 max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500 drop-shadow-[0_22px_30px_rgba(0,0,0,0.8)]"
                 />
               </div>
+            </div>
 
-              <div className="relative z-10 space-y-3 text-center sm:text-start flex-1">
-                <span
-                  className="inline-block text-xs font-bold px-3 py-1 rounded-full border"
-                  style={{
-                    color: cat.accent,
-                    borderColor: `${cat.accent}45`,
-                    backgroundColor: `${cat.accent}15`,
-                  }}
-                >
-                  {formatNumber(cat.product_count, locale)}{' '}
-                  {locale === 'fa' ? 'مدل پرچمدار' : 'Flagship Models'}
+            <div className="md:col-span-6 space-y-3">
+              <h2 className="font-editorial text-3xl sm:text-4xl font-bold text-[#f7f4ee] group-hover:text-[#dfc08e] transition-colors">
+                {locale === 'fa' ? cat.name_fa : cat.name}
+              </h2>
+              <p className="text-xs sm:text-sm text-[#a89f93] leading-[1.9]">
+                {locale === 'fa' ? cat.description_fa : cat.description}
+              </p>
+              <div className="pt-2 inline-flex items-center gap-2 text-xs font-bold text-[#dfc08e] border-b border-[#c59b5f]/45 pb-1">
+                <span>
+                  {locale === 'fa' ? 'ورود به این تالار و مشاهده آثار' : 'Enter Collection'}
                 </span>
-                <h2 className="text-2xl font-black text-white">
-                  {locale === 'fa' ? cat.name_fa : cat.name}
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  {locale === 'fa' ? cat.description_fa : cat.description}
-                </p>
-                <div className="pt-1 inline-flex items-center gap-2 text-xs font-extrabold text-amber-300 group-hover:text-white">
-                  <span>
-                    {locale === 'fa' ? 'ورود به این دسته‌بندی' : 'Explore Collection'}
-                  </span>
-                  <DirArrow className="w-4 h-4" />
-                </div>
+                <DirArrow className="w-4 h-4" />
               </div>
-            </Card3DTilt>
+            </div>
           </Link>
         ))}
       </div>
