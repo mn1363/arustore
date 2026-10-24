@@ -1,0 +1,68 @@
+'use client'
+
+import React from 'react'
+import Link from 'next/link'
+import { ShoppingBag } from 'lucide-react'
+import Breadcrumb from '@/components/layout/Breadcrumb'
+import CartItem from '@/components/cart/CartItem'
+import CartSummary from '@/components/cart/CartSummary'
+import { useCart } from '@/hooks/useCart'
+import { useStore } from '@/lib/store/useStore'
+import { getDict } from '@/lib/data/i18n'
+
+export default function CartPage() {
+  const locale = useStore((s) => s.locale)
+  const dict = getDict(locale)
+  const { cart, updateCartQuantity, removeFromCart, clearCart } = useCart()
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <Breadcrumb items={[{ label: dict.common.cart }]} />
+
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl sm:text-4xl font-black text-white">
+          {dict.common.cart}
+        </h1>
+        {cart.length > 0 && (
+          <button
+            onClick={clearCart}
+            className="text-xs font-semibold text-rose-400 hover:text-rose-300"
+          >
+            {locale === 'fa' ? 'خالی کردن سبد خرید' : 'Clear All Items'}
+          </button>
+        )}
+      </div>
+
+      {cart.length === 0 ? (
+        <div className="glass-panel rounded-3xl p-14 text-center space-y-5 border border-white/10">
+          <div className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 mx-auto flex items-center justify-center text-amber-400">
+            <ShoppingBag className="w-10 h-10" />
+          </div>
+          <h2 className="text-xl font-bold text-white">{dict.common.emptyCart}</h2>
+          <Link
+            href="/products"
+            className="inline-flex px-7 py-3.5 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 text-slate-950 font-black text-sm shadow-neon-cyan"
+          >
+            {dict.common.continueShopping}
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-8 space-y-4">
+            {cart.map((item) => (
+              <CartItem
+                key={item.id}
+                item={item}
+                onUpdateQty={updateCartQuantity}
+                onRemove={removeFromCart}
+              />
+            ))}
+          </div>
+          <div className="lg:col-span-4">
+            <CartSummary />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

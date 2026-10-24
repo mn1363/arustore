@@ -1,13 +1,120 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 255, 255, 255;
+  color-scheme: dark;
+  --bg-obsidian: #07080c;
+  --accent-silver: #e2e8f0;
+  --accent-gold: #eab308;
+  --accent-bronze: #d97706;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: #07080c;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+  background-color: #07080c;
+  color: #f8fafc;
+  font-family: 'Vazirmatn', 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Custom Metallic Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #08090e;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(226, 232, 240, 0.45), rgba(234, 179, 8, 0.5));
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.8), rgba(245, 158, 11, 0.85));
+}
+
+/* True 3D CSS Perspective Utilities */
+.perspective-1000 {
+  perspective: 1100px;
+}
+
+.perspective-1400 {
+  perspective: 1400px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+.translate-z-10 {
+  transform: translateZ(16px);
+}
+
+.translate-z-20 {
+  transform: translateZ(28px);
+}
+
+.translate-z-30 {
+  transform: translateZ(42px);
+}
+
+/* Luxury Metallic & Nero Marble Glassmorphic Surfaces */
+.glass-panel {
+  background: linear-gradient(
+    145deg,
+    rgba(22, 25, 34, 0.82) 0%,
+    rgba(11, 13, 19, 0.9) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 22px 55px -12px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
+}
+
+.glass-pill {
+  background: rgba(18, 21, 30, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Subtle Architectural Atelier Grid */
+.spatial-grid-bg {
+  background-size: 64px 64px;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+}
+
+.text-gradient-spatial {
+  background: linear-gradient(125deg, #ffffff 8%, #cbd5e1 42%, #fde68a 75%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(125deg, #fef3c7 0%, #f59e0b 52%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }

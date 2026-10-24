@@ -1,7 +1,8 @@
-﻿/** @type {import('next').NextConfig} */
+/** @type {import('next').NextConfig} */
 const nextConfig = {
+  transpilePackages: ['three'],
   images: {
-    domains: ['localhost'],
+    unoptimized: true,
     formats: ['image/avif', 'image/webp'],
   },
   reactStrictMode: true,
