@@ -15,10 +15,10 @@ export default function PriceFilter({ maxPrice, onChangeMaxPrice }: PriceFilterP
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          {locale === 'fa' ? 'سقف بودجه' : 'Max Price'}
+        <h4 className="text-xs font-bold text-[#9ca0ab]">
+          {locale === 'fa' ? 'حداکثر قیمت' : 'Max Price'}
         </h4>
-        <span className="text-xs font-bold text-amber-300">
+        <span className="text-xs font-bold text-[#d6b88a]">
           {formatPrice(maxPrice, locale, Math.round(maxPrice * 55000))}
         </span>
       </div>
@@ -29,9 +29,9 @@ export default function PriceFilter({ maxPrice, onChangeMaxPrice }: PriceFilterP
         step={5}
         value={maxPrice}
         onChange={(e) => onChangeMaxPrice(Number(e.target.value))}
-        className="w-full accent-amber-400 cursor-pointer"
+        className="w-full accent-[#d6b88a] cursor-pointer"
       />
-      <div className="flex justify-between text-[10px] text-slate-500">
+      <div className="flex justify-between text-[10px] text-[#666b78]">
         <span>{formatPrice(55, locale, 3000000)}</span>
         <span>{formatPrice(150, locale, 8250000)}</span>
       </div>

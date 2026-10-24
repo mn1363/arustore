@@ -25,10 +25,10 @@ export default function Pagination({
           <button
             key={page}
             onClick={() => onPageChange(page)}
-            className={`w-10 h-10 rounded-xl text-xs font-bold transition-all ${
+            className={`w-10 h-10 rounded-xl text-xs font-bold transition-colors ${
               active
-                ? 'bg-gradient-to-r from-cyan-400 to-violet-500 text-slate-950 shadow-neon-cyan'
-                : 'glass-panel border-white/10 text-slate-300 hover:text-white'
+                ? 'champagne-btn'
+                : 'bg-[#14161a] border border-white/[0.08] text-[#9ca0ab] hover:text-white'
             }`}
           >
             {formatNumber(page, locale)}

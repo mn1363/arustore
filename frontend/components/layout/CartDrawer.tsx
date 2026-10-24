@@ -27,41 +27,32 @@ export default function CartDrawer() {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         onClick={() => setCartDrawerOpen(false)}
       />
 
-      <aside className="relative z-10 w-full max-w-md h-full bg-[#141210] border-s border-[#ece6dc]/18 flex flex-col justify-between">
-        {/* Header */}
-        <div className="px-6 py-5 border-b border-[#ece6dc]/14 flex items-center justify-between bg-[#100f0d]">
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.2em] text-[#c59b5f] uppercase">
-              ORDER LEDGER
-            </div>
-            <h2 className="font-editorial text-2xl font-bold text-[#f7f4ee] leading-tight">
-              {dict.common.cart} ({formatNumber(itemCount, locale)})
-            </h2>
-          </div>
+      <aside className="relative z-10 w-full max-w-md h-full bg-[#14161a] border-s border-white/[0.08] flex flex-col justify-between">
+        <div className="px-6 py-5 border-b border-white/[0.07] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#f2f2f0]">
+            {dict.common.cart} ({formatNumber(itemCount, locale)})
+          </h2>
           <button
             onClick={() => setCartDrawerOpen(false)}
-            className="p-2 border border-[#ece6dc]/16 text-[#b9b0a2] hover:text-[#f7f4ee]"
+            className="p-2 rounded-lg hover:bg-white/[0.06] text-[#9ca0ab] hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Items */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-3.5">
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-4">
-              <div className="w-14 h-14 border border-[#ece6dc]/16 flex items-center justify-center text-[#8c8377]">
-                <ShoppingBag className="w-6 h-6" />
-              </div>
-              <p className="text-sm text-[#9e9589]">{dict.common.emptyCart}</p>
+              <ShoppingBag className="w-8 h-8 text-[#5c606d]" />
+              <p className="text-sm text-[#9ca0ab]">{dict.common.emptyCart}</p>
               <Link
                 href="/products"
                 onClick={() => setCartDrawerOpen(false)}
-                className="px-5 py-2.5 rounded-[2px] satin-brass-btn font-bold text-xs"
+                className="px-5 py-2.5 rounded-xl champagne-btn font-bold text-xs"
               >
                 {dict.common.continueShopping}
               </Link>
@@ -70,13 +61,13 @@ export default function CartDrawer() {
             cart.map((item) => (
               <div
                 key={item.id}
-                className="border border-[#ece6dc]/14 bg-[#181613] p-3.5 flex items-center gap-3.5"
+                className="rounded-xl bg-[#101216] border border-white/[0.06] p-3 flex items-center gap-3.5"
               >
-                <div className="w-20 h-20 bg-[#100f0d] border border-[#ece6dc]/12 p-2 flex-shrink-0">
+                <div className="w-20 h-16 rounded-lg overflow-hidden bg-[#0d0e11] flex-shrink-0">
                   <img
                     src={item.product.images[0]?.url}
                     alt={item.product.name}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-cover"
                   />
                 </div>
 
@@ -84,24 +75,18 @@ export default function CartDrawer() {
                   <Link
                     href={`/product/${item.product.slug}`}
                     onClick={() => setCartDrawerOpen(false)}
-                    className="font-editorial text-xl font-bold text-[#f7f4ee] hover:text-[#dfc08e] line-clamp-1"
+                    className="text-sm font-bold text-[#f2f2f0] hover:text-[#d6b88a] line-clamp-1"
                   >
                     {getProductTitle(item.product, locale)}
                   </Link>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span
-                      className="w-3 h-3 rounded-full border border-white/30"
-                      style={{ backgroundColor: item.selectedColor.accentHex }}
-                    />
-                    <span className="text-[11px] text-[#9e9589] truncate">
-                      {locale === 'fa'
-                        ? item.selectedColor.name_fa
-                        : item.selectedColor.name}
-                    </span>
+                  <div className="text-[11px] text-[#8e93a0] mt-0.5 truncate">
+                    {locale === 'fa'
+                      ? item.selectedColor.name_fa
+                      : item.selectedColor.name}
                   </div>
 
-                  <div className="mt-2.5 flex items-center justify-between gap-2">
-                    <div className="text-xs font-extrabold text-[#dfc08e]">
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-[#d6b88a]">
                       {formatPrice(
                         item.product.price * item.quantity,
                         locale,
@@ -112,22 +97,22 @@ export default function CartDrawer() {
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
-                        className="w-6 h-6 border border-[#ece6dc]/16 hover:border-[#c59b5f] flex items-center justify-center text-[#f7f4ee]"
+                        className="w-6 h-6 rounded-md bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="font-mono text-xs font-bold w-5 text-center">
+                      <span className="text-xs font-bold w-5 text-center">
                         {formatNumber(item.quantity, locale)}
                       </span>
                       <button
                         onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
-                        className="w-6 h-6 border border-[#ece6dc]/16 hover:border-[#c59b5f] flex items-center justify-center text-[#f7f4ee]"
+                        className="w-6 h-6 rounded-md bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => removeFromCart(item.id)}
-                        className="p-1 text-[#8c8377] hover:text-[#dfc08e] ms-1"
+                        className="p-1 text-[#7d828f] hover:text-white ms-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -139,12 +124,11 @@ export default function CartDrawer() {
           )}
         </div>
 
-        {/* Footer */}
         {cart.length > 0 && (
-          <div className="p-5 border-t border-[#ece6dc]/14 bg-[#100f0d] space-y-3.5">
+          <div className="p-5 border-t border-white/[0.07] bg-[#101216] space-y-3.5">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-[#9e9589]">{dict.common.subtotal}</span>
-              <span className="text-base font-extrabold text-[#f7f4ee]">
+              <span className="text-[#9ca0ab]">{dict.common.subtotal}</span>
+              <span className="text-base font-bold text-[#f2f2f0]">
                 {formatPrice(subtotalUsd, locale, subtotalToman)}
               </span>
             </div>
@@ -153,14 +137,14 @@ export default function CartDrawer() {
               <Link
                 href="/cart"
                 onClick={() => setCartDrawerOpen(false)}
-                className="py-3 border border-[#ece6dc]/20 text-center text-xs font-bold text-[#d6cfc4] hover:border-[#c59b5f]"
+                className="py-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-center text-xs font-bold text-[#e4e6eb]"
               >
-                {locale === 'fa' ? 'دفتر کامل سفارش' : 'Full Order Sheet'}
+                {locale === 'fa' ? 'سبد خرید' : 'View Bag'}
               </Link>
               <Link
                 href="/checkout"
                 onClick={() => setCartDrawerOpen(false)}
-                className="py-3 rounded-[2px] satin-brass-btn font-bold text-xs flex items-center justify-center gap-1.5"
+                className="py-3 rounded-xl champagne-btn font-bold text-xs flex items-center justify-center gap-1.5"
               >
                 <span>{dict.common.checkout}</span>
                 {locale === 'fa' ? (

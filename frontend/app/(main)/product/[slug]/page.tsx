@@ -14,16 +14,13 @@ import {
 import Breadcrumb from '@/components/layout/Breadcrumb'
 import ProductGallery from '@/components/product/ProductGallery'
 import ProductSpecs from '@/components/product/ProductSpecs'
-import ProductReviews from '@/components/product/ProductReviews'
 import RelatedProducts from '@/components/product/RelatedProducts'
 import { useStore } from '@/lib/store/useStore'
 import { getDict } from '@/lib/data/i18n'
 import {
-  calculateDiscount,
   formatNumber,
   formatPrice,
   getProductDescription,
-  getProductSubtitle,
   getProductTitle,
 } from '@/lib/utils'
 
@@ -45,7 +42,6 @@ export default function ProductDetailPage() {
   const selectedEdition = product.editions?.find((e) => e.id === editionId)
   const finalUsd = product.price + (selectedEdition?.priceDelta || 0)
   const finalToman = product.price_toman + (selectedEdition?.priceDeltaToman || 0)
-  const discount = calculateDiscount(product.price, product.compare_price)
   const isWishlisted = wishlistIds.includes(product.id)
 
   return (
@@ -54,7 +50,7 @@ export default function ProductDetailPage() {
         <Breadcrumb
           items={[
             {
-              label: locale === 'fa' ? 'آثار و ظروف' : 'Objects',
+              label: locale === 'fa' ? 'محصولات' : 'Products',
               href: '/products',
             },
             {
@@ -67,78 +63,30 @@ export default function ProductDetailPage() {
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* Dual 3D WebGL + Studio Plate Vitrine */}
           <div className="lg:col-span-7">
             <ProductGallery product={product} selectedColor={selectedColor} />
           </div>
 
-          {/* Specimen Dossier & Order Panel */}
           <div className="lg:col-span-5">
-            <div className="atelier-corners border border-[#ece6dc]/18 bg-[#151310] p-6 sm:p-8 space-y-6">
-              {/* SKU & Workshop Stamp */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#ece6dc]/12 pb-3">
-                <span className="font-mono text-[11px] tracking-[0.18em] uppercase text-[#c59b5f]">
-                  ARU-{100 + product.id} · {locale === 'fa' ? product.brand.name_fa : product.brand.name}
-                </span>
-                {discount > 0 && (
-                  <span className="px-2 py-0.5 text-[11px] font-bold bg-[#c59b5f]/20 text-[#dfc08e]">
-                    {formatNumber(discount, locale)}٪ {dict.common.off}
-                  </span>
-                )}
-              </div>
-
-              {/* Editorial Title */}
+            <div className="rounded-2xl bg-[#14161a] border border-white/[0.07] p-6 sm:p-8 space-y-6">
               <div>
-                <h1 className="font-editorial text-3xl sm:text-5xl font-bold text-[#f7f4ee] leading-[1.08]">
+                <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
                   {getProductTitle(product, locale)}
                 </h1>
-                <p className="text-xs sm:text-sm text-[#9e9589] mt-2">
-                  {getProductSubtitle(product, locale)}
-                </p>
-
-                <div className="flex items-center gap-3 mt-3 font-mono text-[11px] text-[#b9b0a2]">
-                  <span>★ {product.rating_avg.toFixed(2)}</span>
-                  <span className="text-[#ece6dc]/20">|</span>
-                  <span>
-                    {formatNumber(product.rating_count, locale)}{' '}
-                    {locale === 'fa' ? 'ثبت دیدگاه' : 'reviews'}
-                  </span>
-                  <span className="text-[#dfc08e] ms-auto font-sans font-semibold">
-                    ● {dict.common.inStock}
-                  </span>
+                <div className="text-xl sm:text-2xl font-bold text-[#d6b88a] mt-3">
+                  {formatPrice(finalUsd, locale, finalToman)}
                 </div>
               </div>
 
-              {/* Price Ledger */}
-              <div className="py-4 border-y border-[#ece6dc]/14 flex items-baseline justify-between gap-4">
-                <div>
-                  <div className="font-mono text-[10px] tracking-widest uppercase text-[#8c8377]">
-                    {dict.common.price}
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-extrabold text-[#f7f4ee] mt-0.5">
-                    {formatPrice(finalUsd, locale, finalToman)}
-                  </div>
-                </div>
-                {product.compare_price && (
-                  <div className="text-sm text-[#7e766b] line-through">
-                    {formatPrice(
-                      product.compare_price,
-                      locale,
-                      product.compare_price_toman
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs sm:text-sm text-[#c9c0b3] leading-[1.9]">
+              <p className="text-sm text-[#9ca0ab] leading-relaxed">
                 {getProductDescription(product, locale)}
               </p>
 
-              {/* Anodize Finish Selector */}
+              {/* Color Swatches */}
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#9e9589]">{dict.common.color}:</span>
-                  <span className="font-bold text-[#f7f4ee]">
+                <div className="text-xs text-[#9ca0ab]">
+                  {dict.common.color}:{' '}
+                  <span className="font-bold text-[#f2f2f0]">
                     {locale === 'fa' ? selectedColor.name_fa : selectedColor.name}
                   </span>
                 </div>
@@ -147,14 +95,14 @@ export default function ProductDetailPage() {
                     <button
                       key={c.id}
                       onClick={() => setColorIdx(idx)}
-                      className={`px-3.5 py-2 border text-xs font-medium flex items-center gap-2 transition-colors ${
+                      className={`px-3.5 py-2 rounded-xl border text-xs font-medium flex items-center gap-2 transition-colors ${
                         colorIdx === idx
-                          ? 'bg-[#221e19] border-[#c59b5f] text-[#f7f4ee]'
-                          : 'bg-[#11100e] border-[#ece6dc]/14 text-[#9e9589] hover:text-[#f7f4ee]'
+                          ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0]'
+                          : 'bg-transparent border-white/10 text-[#9ca0ab] hover:text-white'
                       }`}
                     >
                       <span
-                        className="w-4 h-4 rounded-full border border-white/30"
+                        className="w-3.5 h-3.5 rounded-full border border-white/25"
                         style={{
                           background: `linear-gradient(135deg, ${c.hex} 40%, ${c.accentHex} 100%)`,
                         }}
@@ -168,7 +116,6 @@ export default function ProductDetailPage() {
               {/* Edition Selector */}
               {product.editions && product.editions.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-xs text-[#9e9589]">{dict.common.edition}:</div>
                   <div className="grid grid-cols-1 gap-2">
                     {product.editions.map((ed) => {
                       const active = ed.id === editionId
@@ -176,15 +123,15 @@ export default function ProductDetailPage() {
                         <button
                           key={ed.id}
                           onClick={() => setEditionId(ed.id)}
-                          className={`px-4 py-3 border text-xs font-bold flex items-center justify-between transition-colors ${
+                          className={`px-4 py-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-colors ${
                             active
-                              ? 'bg-[#221e19] border-[#c59b5f] text-[#f7f4ee]'
-                              : 'bg-[#11100e] border-[#ece6dc]/14 text-[#b9b0a2] hover:border-[#ece6dc]/30'
+                              ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0]'
+                              : 'border-white/10 text-[#9ca0ab] hover:border-white/20'
                           }`}
                         >
                           <span>{locale === 'fa' ? ed.label_fa : ed.label}</span>
                           {ed.priceDelta > 0 && (
-                            <span className="text-[#dfc08e]">
+                            <span className="text-[#d6b88a]">
                               + {formatPrice(ed.priceDelta, locale, ed.priceDeltaToman)}
                             </span>
                           )}
@@ -195,33 +142,33 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {/* Craft Highlights */}
+              {/* Highlights */}
               <div className="space-y-2 pt-1">
                 {(locale === 'fa' ? product.highlights_fa : product.highlights).map(
                   (h, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-[#c9c0b3]">
-                      <Check className="w-3.5 h-3.5 text-[#c59b5f] flex-shrink-0" />
+                    <div key={i} className="flex items-center gap-2 text-xs text-[#b4b8c2]">
+                      <Check className="w-3.5 h-3.5 text-[#d6b88a] flex-shrink-0" />
                       <span>{h}</span>
                     </div>
                   )
                 )}
               </div>
 
-              {/* Quantity + Commission Trigger */}
+              {/* Actions */}
               <div className="flex items-center gap-2.5 pt-2">
-                <div className="flex items-center gap-2 px-3 py-3 border border-[#ece6dc]/16 bg-[#11100e]">
+                <div className="flex items-center gap-2 px-3 py-3 rounded-xl border border-white/10 bg-[#0d0e11]">
                   <button
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    className="p-0.5 text-[#b9b0a2] hover:text-[#f7f4ee]"
+                    className="p-0.5 text-[#9ca0ab] hover:text-white"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
-                  <span className="w-7 text-center font-mono font-bold text-sm">
+                  <span className="w-6 text-center font-bold text-sm">
                     {formatNumber(quantity, locale)}
                   </span>
                   <button
                     onClick={() => setQuantity((q) => q + 1)}
-                    className="p-0.5 text-[#b9b0a2] hover:text-[#f7f4ee]"
+                    className="p-0.5 text-[#9ca0ab] hover:text-white"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -231,7 +178,7 @@ export default function ProductDetailPage() {
                   onClick={() =>
                     addToCart(product, quantity, selectedColor, editionId)
                   }
-                  className="flex-1 py-3.5 px-5 rounded-[2px] brushed-metal-btn font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                  className="flex-1 py-3.5 px-5 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2 transition-colors"
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span>{dict.common.addToCart}</span>
@@ -239,26 +186,25 @@ export default function ProductDetailPage() {
 
                 <button
                   onClick={() => toggleWishlist(product.id)}
-                  className={`p-3.5 border transition-colors ${
+                  className={`p-3.5 rounded-xl border transition-colors ${
                     isWishlisted
-                      ? 'bg-[#c59b5f]/20 border-[#c59b5f] text-[#dfc08e]'
-                      : 'bg-[#11100e] border-[#ece6dc]/16 text-[#b9b0a2] hover:text-[#f7f4ee]'
+                      ? 'border-[#d6b88a] text-[#d6b88a]'
+                      : 'border-white/10 text-[#9ca0ab] hover:text-white'
                   }`}
                 >
                   <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-current' : ''}`} />
                 </button>
               </div>
 
-              {/* Foundry Guarantees */}
-              <div className="pt-4 border-t border-[#ece6dc]/12 grid grid-cols-2 gap-3 text-[11px] text-[#9e9589]">
+              <div className="pt-4 border-t border-white/[0.06] grid grid-cols-2 gap-3 text-xs text-[#8e93a0]">
                 <div className="flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-[#c59b5f] flex-shrink-0" />
+                  <Truck className="w-4 h-4 text-[#d6b88a] flex-shrink-0" />
                   <span>{dict.common.freeShipping}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-[#c59b5f] flex-shrink-0" />
+                  <ShieldCheck className="w-4 h-4 text-[#d6b88a] flex-shrink-0" />
                   <span>
-                    {locale === 'fa' ? 'ضمانت ۵ ساله ثبات آنودایز' : '5-Year Anodize Guarantee'}
+                    {locale === 'fa' ? 'ضمانت ۵ ساله ثبات رنگ' : '5-Year Warranty'}
                   </span>
                 </div>
               </div>
@@ -267,13 +213,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* Specs */}
       <ProductSpecs specs={product.specs} />
-
-      {/* Reviews */}
-      <ProductReviews product={product} />
-
-      {/* Related Products */}
       <RelatedProducts currentProduct={product} />
     </div>
   )

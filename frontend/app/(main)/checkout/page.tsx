@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, PackageCheck, Sparkles } from 'lucide-react'
+import { CheckCircle2, PackageCheck } from 'lucide-react'
 import Breadcrumb from '@/components/layout/Breadcrumb'
 import ShippingForm, { ShippingData } from '@/components/checkout/ShippingForm'
 import PaymentForm, { CardData } from '@/components/checkout/PaymentForm'
@@ -45,50 +45,41 @@ export default function CheckoutPage() {
       pushToast({
         title:
           locale === 'fa'
-            ? `سفارش ${order.orderNumber} با موفقیت ثبت شد!`
-            : `Order ${order.orderNumber} confirmed!`,
+            ? `سفارش ${order.orderNumber} ثبت شد`
+            : `Order ${order.orderNumber} confirmed`,
         type: 'success',
       })
-    }, 850)
+    }, 650)
   }
 
   if (completedOrder) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16">
-        <div className="glass-panel rounded-[2.5rem] p-8 sm:p-12 border border-amber-400/35 text-center space-y-6 shadow-neon-cyan">
-          <div className="w-20 h-20 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 mx-auto flex items-center justify-center">
-            <CheckCircle2 className="w-10 h-10" />
+      <div className="max-w-2xl mx-auto px-4 py-16">
+        <div className="rounded-3xl bg-[#14161a] p-8 sm:p-12 border border-white/[0.08] text-center space-y-6">
+          <div className="w-16 h-16 rounded-full bg-[#d6b88a]/15 border border-[#d6b88a]/35 text-[#d6b88a] mx-auto flex items-center justify-center">
+            <CheckCircle2 className="w-8 h-8" />
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-amber-500/15 text-amber-300 text-xs font-bold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{completedOrder.orderNumber}</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-4xl font-black text-white">
-            {locale === 'fa'
-              ? 'سفارش VIP شما با موفقیت ثبت شد!'
-              : 'Your VIP Order is Confirmed!'}
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+            {locale === 'fa' ? 'سفارش شما ثبت شد' : 'Order Confirmed'}
           </h1>
-          <p className="text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+          <p className="text-sm text-[#9ca0ab] max-w-md mx-auto leading-relaxed">
             {locale === 'fa'
-              ? `سفارش شما به نام «${completedOrder.customerName}» وارد واحد بسته‌بندی ضدضربه کلکسیونی آرو استور شد و از طریق صفحه پیگیری سفارش‌ها قابل مشاهده است.`
-              : `Your flagship package for ${completedOrder.customerName} is now being prepared for VIP dispatch.`}
+              ? `سفارش به شماره ${completedOrder.orderNumber} برای «${completedOrder.customerName}» ثبت شد و در حال آماده‌سازی برای ارسال است.`
+              : `Order ${completedOrder.orderNumber} for ${completedOrder.customerName} is being prepared for dispatch.`}
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <Link
               href="/orders"
-              className="px-7 py-3.5 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 text-slate-950 font-black text-sm flex items-center gap-2"
+              className="px-6 py-3 rounded-xl champagne-btn font-bold text-sm flex items-center gap-2"
             >
               <PackageCheck className="w-4 h-4" />
-              <span>
-                {locale === 'fa' ? 'پیگیری لحظه‌ای سفارش' : 'Track Your Order'}
-              </span>
+              <span>{locale === 'fa' ? 'پیگیری سفارش' : 'Track Order'}</span>
             </Link>
             <Link
               href="/products"
-              className="px-6 py-3.5 rounded-2xl glass-pill text-sm font-bold text-slate-200 hover:text-white"
+              className="px-6 py-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-sm font-medium text-[#d4d6dc]"
             >
               {locale === 'fa' ? 'بازگشت به فروشگاه' : 'Continue Shopping'}
             </Link>
@@ -103,12 +94,12 @@ export default function CheckoutPage() {
       <Breadcrumb
         items={[
           { label: locale === 'fa' ? 'سبد خرید' : 'Bag', href: '/cart' },
-          { label: locale === 'fa' ? 'تسویه حساب امن' : 'Checkout' },
+          { label: locale === 'fa' ? 'تسویه حساب' : 'Checkout' },
         ]}
       />
 
-      <h1 className="text-2xl sm:text-4xl font-black text-white">
-        {locale === 'fa' ? 'تکمیل خرید امن سه‌بعدی' : 'Secure Spatial Checkout'}
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+        {locale === 'fa' ? 'تسویه حساب' : 'Checkout'}
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

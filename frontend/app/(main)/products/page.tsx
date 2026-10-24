@@ -71,42 +71,32 @@ function ProductsCatalogContent() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <Breadcrumb
-        items={[
-          { label: locale === 'fa' ? 'آثار و ظروف' : 'Objects' },
-        ]}
+        items={[{ label: locale === 'fa' ? 'محصولات' : 'Products' }]}
       />
 
-      {/* Clean Compact Masthead */}
-      <div className="border-b border-[#ece6dc]/15 pb-5 flex flex-wrap items-end justify-between gap-4">
-        <h1 className="font-editorial text-3xl sm:text-4xl font-extrabold text-[#f7f4ee]">
-          {locale === 'fa' ? 'محصولات کارگاه آرو' : 'AruStore Workshop Products'}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl sm:text-4xl font-bold text-[#f2f2f0]">
+          {locale === 'fa' ? 'محصولات' : 'Products'}
         </h1>
-
-        <div className="border border-[#ece6dc]/16 bg-[#161411] px-3.5 py-2 text-xs text-[#b9b0a2]">
-          <span className="font-bold text-[#dfc08e] text-sm me-1.5">
-            {formatNumber(total, locale)}
-          </span>
-          {locale === 'fa' ? 'مدل آماده ارسال' : 'models'}
-        </div>
+        <span className="text-xs sm:text-sm text-[#8e93a0]">
+          {formatNumber(total, locale)} {locale === 'fa' ? 'محصول' : 'items'}
+        </span>
       </div>
 
-      {/* Architectural Underline Category Tabs */}
-      <div className="flex items-center gap-6 overflow-x-auto border-b border-[#ece6dc]/12">
+      {/* Clean Category Filter Tabs */}
+      <div className="flex items-center gap-6 overflow-x-auto border-b border-white/[0.07]">
         <button
           onClick={() => {
             setCategorySlug('all')
             setPage(1)
           }}
-          className={`pb-3 text-xs sm:text-sm font-bold whitespace-nowrap transition-colors relative ${
+          className={`pb-3 text-xs sm:text-sm whitespace-nowrap border-b-2 transition-colors ${
             categorySlug === 'all'
-              ? 'text-[#f7f4ee]'
-              : 'text-[#8c8377] hover:text-[#d6cfc4]'
+              ? 'text-[#f2f2f0] font-bold border-[#d6b88a]'
+              : 'text-[#8e93a0] border-transparent hover:text-[#d4d6dc]'
           }`}
         >
-          <span>{locale === 'fa' ? 'تمامی آثار' : 'All Objects'}</span>
-          {categorySlug === 'all' && (
-            <span className="absolute bottom-0 inset-x-0 h-[2px] bg-[#c59b5f]" />
-          )}
+          {locale === 'fa' ? 'همه' : 'All'}
         </button>
         {CATEGORIES.map((cat) => {
           const active = categorySlug === cat.slug
@@ -117,21 +107,19 @@ function ProductsCatalogContent() {
                 setCategorySlug(cat.slug)
                 setPage(1)
               }}
-              className={`pb-3 text-xs sm:text-sm font-bold whitespace-nowrap transition-colors relative ${
-                active ? 'text-[#f7f4ee]' : 'text-[#8c8377] hover:text-[#d6cfc4]'
+              className={`pb-3 text-xs sm:text-sm whitespace-nowrap border-b-2 transition-colors ${
+                active
+                  ? 'text-[#f2f2f0] font-bold border-[#d6b88a]'
+                  : 'text-[#8e93a0] border-transparent hover:text-[#d4d6dc]'
               }`}
             >
-              <span>{locale === 'fa' ? cat.name_fa : cat.name}</span>
-              {active && (
-                <span className="absolute bottom-0 inset-x-0 h-[2px] bg-[#c59b5f]" />
-              )}
+              {locale === 'fa' ? cat.name_fa : cat.name}
             </button>
           )
         })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Sidebar Filters */}
         <div className="lg:col-span-3">
           <Sidebar onReset={handleReset}>
             <BrandFilter
@@ -161,27 +149,11 @@ function ProductsCatalogContent() {
                 setMaxPrice(val)
               }}
             />
-
-            <label className="flex items-center justify-between cursor-pointer pt-2 border-t border-[#ece6dc]/10">
-              <span className="text-xs font-medium text-[#c9c0b3]">
-                {locale === 'fa' ? 'فقط شرایط ویژه کارگاه' : 'Special Allocation Only'}
-              </span>
-              <input
-                type="checkbox"
-                checked={onlyOnSale}
-                onChange={(e) => {
-                  setPage(1)
-                  setOnlyOnSale(e.target.checked)
-                }}
-                className="w-4 h-4 accent-[#c59b5f]"
-              />
-            </label>
           </Sidebar>
         </div>
 
-        {/* Main Products Column */}
         <div className="lg:col-span-9 space-y-6">
-          <div className="border border-[#ece6dc]/14 bg-[#161411] p-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-2xl bg-[#14161a] border border-white/[0.07] p-3 flex flex-wrap items-center justify-between gap-3">
             <SearchBar
               value={search}
               onChange={(val) => {
@@ -194,38 +166,35 @@ function ProductsCatalogContent() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                className="bg-[#11100e] border border-[#ece6dc]/16 px-3.5 py-2.5 text-xs font-medium text-[#e6dfd3] focus:outline-none focus:border-[#c59b5f]"
+                className="rounded-xl bg-[#0d0e11] border border-white/10 px-3.5 py-2 text-xs text-[#e4e6eb] focus:outline-none"
               >
                 <option value="featured">
-                  {locale === 'fa' ? 'چیدمان: برگزیده تالار' : 'Sort: Curated'}
+                  {locale === 'fa' ? 'پیشنهادی' : 'Featured'}
                 </option>
                 <option value="newest">
-                  {locale === 'fa' ? 'جدیدترین قالب‌ها' : 'Sort: Newest'}
-                </option>
-                <option value="rating">
-                  {locale === 'fa' ? 'بالاترین رضایت خریداران' : 'Sort: Highest Rated'}
+                  {locale === 'fa' ? 'جدیدترین' : 'Newest'}
                 </option>
                 <option value="price-asc">
-                  {locale === 'fa' ? 'قیمت: کم به زیاد' : 'Price: Low to High'}
+                  {locale === 'fa' ? 'ارزان‌ترین' : 'Price: Low to High'}
                 </option>
                 <option value="price-desc">
-                  {locale === 'fa' ? 'قیمت: زیاد به کم' : 'Price: High to Low'}
+                  {locale === 'fa' ? 'گران‌ترین' : 'Price: High to Low'}
                 </option>
               </select>
 
-              <div className="hidden sm:flex items-center border border-[#ece6dc]/16 bg-[#11100e]">
+              <div className="hidden sm:flex items-center p-1 rounded-xl bg-[#0d0e11] border border-white/10">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-2 ${
-                    viewMode === 'grid' ? 'bg-[#c59b5f] text-[#11100e]' : 'text-[#9e9589]'
+                  className={`p-1.5 rounded-lg ${
+                    viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-[#7d828f]'
                   }`}
                 >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-2 ${
-                    viewMode === 'list' ? 'bg-[#c59b5f] text-[#11100e]' : 'text-[#9e9589]'
+                  className={`p-1.5 rounded-lg ${
+                    viewMode === 'list' ? 'bg-white/10 text-white' : 'text-[#7d828f]'
                   }`}
                 >
                   <List className="w-4 h-4" />
@@ -235,39 +204,27 @@ function ProductsCatalogContent() {
           </div>
 
           {paginated.length === 0 ? (
-            <div className="border border-[#ece6dc]/14 bg-[#161411] p-12 text-center space-y-4">
-              <p className="font-editorial text-2xl font-bold text-[#f7f4ee]">
-                {locale === 'fa'
-                  ? 'اثری با این مشخصات یافت نشد'
-                  : 'No objects matched your selection'}
+            <div className="rounded-2xl bg-[#14161a] border border-white/[0.07] p-12 text-center space-y-4">
+              <p className="text-base font-bold text-[#f2f2f0]">
+                {locale === 'fa' ? 'محصولی یافت نشد' : 'No products found'}
               </p>
               <button
                 onClick={handleReset}
-                className="px-5 py-2.5 rounded-[2px] satin-brass-btn font-bold text-xs"
+                className="px-5 py-2.5 rounded-xl champagne-btn font-bold text-xs"
               >
-                {locale === 'fa' ? 'بازنشانی فیلترها' : 'Reset Filters'}
+                {locale === 'fa' ? 'نمایش همه' : 'Reset'}
               </button>
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {paginated.map((product, idx) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  variant="grid"
-                  indexNumber={(page - 1) * pageSize + idx}
-                />
+              {paginated.map((product) => (
+                <ProductCard key={product.id} product={product} variant="grid" />
               ))}
             </div>
           ) : (
             <div className="space-y-4">
-              {paginated.map((product, idx) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  variant="list"
-                  indexNumber={(page - 1) * pageSize + idx}
-                />
+              {paginated.map((product) => (
+                <ProductCard key={product.id} product={product} variant="list" />
               ))}
             </div>
           )}

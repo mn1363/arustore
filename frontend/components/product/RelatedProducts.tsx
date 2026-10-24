@@ -20,8 +20,8 @@ export default function RelatedProducts({ currentProduct }: { currentProduct: Pr
 
   return (
     <section className="space-y-6">
-      <h2 className="text-xl sm:text-2xl font-extrabold text-white">
-        {locale === 'fa' ? 'محصولات مکمل در اکوسیستم سه‌بعدی' : 'Complete Your Spatial Ecosystem'}
+      <h2 className="text-xl sm:text-2xl font-bold text-[#f2f2f0]">
+        {locale === 'fa' ? 'محصولات مشابه' : 'Related Products'}
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {related.map((item) => (

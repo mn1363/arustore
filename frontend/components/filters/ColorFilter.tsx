@@ -4,10 +4,10 @@ import React from 'react'
 import { useStore } from '@/lib/store/useStore'
 
 const FINISH_PALETTE = [
-  { id: '#eab308', label: 'Champagne Gold Accent', label_fa: 'طلایی شامپاینی آنودایز', hex: '#eab308' },
-  { id: '#e2e8f0', label: 'Mirror Silver Aluminum', label_fa: 'سیلور آینه‌ای خالص', hex: '#e2e8f0' },
-  { id: '#d97706', label: 'Antique Bronze Collar', label_fa: 'برنزی آنتیک پتینه', hex: '#d97706' },
-  { id: '#cbd5e1', label: 'Smoked Pewter Satin', label_fa: 'دودی تیتانیومی مات', hex: '#64748b' },
+  { id: '#eab308', label: 'Champagne Gold', label_fa: 'شامپاینی مات', hex: '#d6b88a' },
+  { id: '#e2e8f0', label: 'Brushed Silver', label_fa: 'نقره‌ای برس‌خورده', hex: '#e2e8f0' },
+  { id: '#d97706', label: 'Warm Bronze', label_fa: 'برنزی گرم', hex: '#b6864f' },
+  { id: '#cbd5e1', label: 'Smoked Pewter', label_fa: 'دودی مات', hex: '#64748b' },
 ]
 
 export default function ColorFilter({
@@ -21,8 +21,8 @@ export default function ColorFilter({
 
   return (
     <div className="space-y-2.5">
-      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-        {locale === 'fa' ? 'نوع آبکاری و رنگ آلومینیوم' : 'Aluminum Anodize Finish'}
+      <h4 className="text-xs font-bold text-[#9ca0ab]">
+        {locale === 'fa' ? 'پوشش رنگ' : 'Finish'}
       </h4>
       <div className="flex flex-wrap gap-2">
         {FINISH_PALETTE.map((c) => {
@@ -32,10 +32,10 @@ export default function ColorFilter({
               key={c.id}
               type="button"
               onClick={() => onSelectColor(active ? undefined : c.id)}
-              className={`px-3 py-1.5 rounded-full text-xs flex items-center gap-2 border transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs flex items-center gap-2 border transition-colors ${
                 active
-                  ? 'bg-amber-500/20 border-amber-400 text-white font-semibold'
-                  : 'bg-white/[0.03] border-white/10 text-slate-300 hover:border-white/30'
+                  ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0] font-semibold'
+                  : 'bg-transparent border-white/10 text-[#9ca0ab] hover:border-white/25'
               }`}
             >
               <span

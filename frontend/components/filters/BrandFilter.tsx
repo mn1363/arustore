@@ -15,8 +15,8 @@ export default function BrandFilter({ selectedBrands, onToggleBrand }: BrandFilt
 
   return (
     <div className="space-y-2.5">
-      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-        {locale === 'fa' ? 'برند سازنده' : 'Studio Brand'}
+      <h4 className="text-xs font-bold text-[#9ca0ab]">
+        {locale === 'fa' ? 'خط تولید' : 'Line'}
       </h4>
       <div className="space-y-1.5">
         {BRANDS.map((brand) => {
@@ -26,14 +26,14 @@ export default function BrandFilter({ selectedBrands, onToggleBrand }: BrandFilt
               key={brand.id}
               type="button"
               onClick={() => onToggleBrand(brand.slug)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all border ${
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors border ${
                 checked
-                  ? 'bg-cyan-500/15 border-cyan-400/50 text-cyan-200 font-semibold'
-                  : 'bg-white/[0.02] border-transparent text-slate-300 hover:bg-white/[0.06]'
+                  ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0] font-semibold'
+                  : 'bg-transparent border-transparent text-[#9ca0ab] hover:bg-white/[0.04] hover:text-[#e4e6eb]'
               }`}
             >
               <span>{locale === 'fa' ? brand.name_fa : brand.name}</span>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-[11px] text-[#666b78]">
                 {formatNumber(brand.product_count, locale)}
               </span>
             </button>

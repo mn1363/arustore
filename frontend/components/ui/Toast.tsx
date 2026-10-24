@@ -15,26 +15,26 @@ export default function ToastContainer() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className="pointer-events-auto glass-panel rounded-2xl p-3.5 border border-cyan-400/30 flex items-start gap-3 shadow-neon-cyan animate-fade-in"
+          className="pointer-events-auto rounded-xl bg-[#181a20] p-3.5 border border-white/10 flex items-start gap-3 shadow-xl animate-fade-in"
         >
           {toast.type === 'success' && (
-            <CheckCircle2 className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 text-[#d6b88a] flex-shrink-0 mt-0.5" />
           )}
           {toast.type === 'info' && (
-            <Info className="w-5 h-5 text-violet-400 flex-shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 text-[#d4d6dc] flex-shrink-0 mt-0.5" />
           )}
           {toast.type === 'error' && (
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
           )}
           <div className="flex-1 min-w-0">
-            <div className="text-xs sm:text-sm font-semibold text-white">{toast.title}</div>
+            <div className="text-xs sm:text-sm font-semibold text-[#f2f2f0]">{toast.title}</div>
             {toast.description && (
-              <div className="text-xs text-slate-400 mt-0.5 truncate">{toast.description}</div>
+              <div className="text-xs text-[#9ca0ab] mt-0.5 truncate">{toast.description}</div>
             )}
           </div>
           <button
             onClick={() => dismissToast(toast.id)}
-            className="text-slate-400 hover:text-white p-1"
+            className="text-[#8e93a0] hover:text-white p-1"
           >
             <X className="w-3.5 h-3.5" />
           </button>

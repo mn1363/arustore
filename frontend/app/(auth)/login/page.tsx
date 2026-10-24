@@ -3,7 +3,6 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles } from 'lucide-react'
 import Input from '@/components/ui/Input'
 import { useAuth } from '@/hooks/useAuth'
 import { useStore } from '@/lib/store/useStore'
@@ -14,40 +13,36 @@ export default function LoginPage() {
   const pushToast = useStore((s) => s.pushToast)
   const { loginDemoUser } = useAuth()
 
-  const [email, setEmail] = useState('arian@arustore.io')
+  const [email, setEmail] = useState('arian@arustore.ir')
   const [password, setPassword] = useState('••••••••••••')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     loginDemoUser(true, undefined, email)
     pushToast({
-      title: locale === 'fa' ? 'خوش آمدید به آرو استور!' : 'Welcome back to AruStore!',
+      title: locale === 'fa' ? 'خوش آمدید' : 'Welcome back',
       type: 'success',
     })
     router.push('/profile')
   }
 
   return (
-    <div className="w-full max-w-4xl glass-panel rounded-[2.25rem] border border-white/15 overflow-hidden grid grid-cols-1 md:grid-cols-12 shadow-glass-3d">
+    <div className="w-full max-w-4xl rounded-3xl bg-[#14161a] border border-white/[0.08] overflow-hidden grid grid-cols-1 md:grid-cols-12">
       <div className="md:col-span-6 p-8 sm:p-10 space-y-6">
         <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-400">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>ARU QUANTUM ID</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white">
-            {locale === 'fa' ? 'ورود به حساب کاربری' : 'Sign In to Studio'}
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+            {locale === 'fa' ? 'ورود به حساب کاربری' : 'Sign In'}
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[#8e93a0]">
             {locale === 'fa'
-              ? 'دسترسی به سفارش‌های VIP، لیست علاقه‌مندی‌ها و پنل مدیریت'
-              : 'Access your VIP orders, saved 3D builds & profile'}
+              ? 'مشاهده سفارش‌ها و مدیریت لیست علاقه‌مندی‌ها'
+              : 'Manage your orders and saved items'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label={locale === 'fa' ? 'ایمیل کاربری' : 'Email Address'}
+            label={locale === 'fa' ? 'ایمیل' : 'Email'}
             dir="ltr"
             type="email"
             value={email}
@@ -55,7 +50,7 @@ export default function LoginPage() {
             required
           />
           <Input
-            label={locale === 'fa' ? 'گذرواژه امنیتی' : 'Password'}
+            label={locale === 'fa' ? 'رمز عبور' : 'Password'}
             dir="ltr"
             type="password"
             value={password}
@@ -65,38 +60,26 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-slate-950 font-black text-sm shadow-neon-cyan hover:brightness-110 transition-all"
+            className="w-full py-3.5 rounded-xl champagne-btn font-bold text-sm transition-colors"
           >
-            {locale === 'fa' ? 'ورود به استودیو' : 'Sign In'}
+            {locale === 'fa' ? 'ورود' : 'Sign In'}
           </button>
         </form>
 
-        <div className="text-xs text-slate-400 text-center pt-2">
-          {locale === 'fa' ? 'هنوز عضو نیستید؟ ' : 'New collector? '}
-          <Link href="/register" className="text-cyan-300 font-bold hover:underline">
-            {locale === 'fa' ? 'ساخت حساب VIP جدید' : 'Create VIP Account'}
+        <div className="text-xs text-[#8e93a0] text-center pt-2">
+          {locale === 'fa' ? 'حساب کاربری ندارید؟ ' : 'No account yet? '}
+          <Link href="/register" className="text-[#d6b88a] font-bold hover:underline">
+            {locale === 'fa' ? 'ثبت‌نام' : 'Create Account'}
           </Link>
         </div>
       </div>
 
-      <div className="hidden md:flex md:col-span-6 relative bg-obsidian-950 items-center justify-center p-8 overflow-hidden border-s border-white/10">
+      <div className="hidden md:block md:col-span-6 bg-[#101216] border-s border-white/[0.07]">
         <img
           src="/images/banners/hero-aluminum-atelier.png"
-          alt="آتلیه آلومینیوم آرو"
-          className="absolute inset-0 w-full h-full object-cover opacity-35"
+          alt="ظروف پذیرایی آلومینیومی آرو استور"
+          className="w-full h-full object-cover"
         />
-        <div className="relative z-10 text-center space-y-4">
-          <img
-            src="/images/products/tiered-stand.png"
-            alt="شیرینی‌خوری سه‌طبقه آلومینیومی"
-            className="w-60 h-60 object-contain rounded-2xl mx-auto animate-float-slow drop-shadow-[0_24px_40px_rgba(245,158,11,0.3)]"
-          />
-          <p className="text-sm font-bold text-white">
-            {locale === 'fa'
-              ? 'صنایع تولیدی ظروف پذیرایی آلومینیومی لوکس آرو'
-              : 'Handcrafted Pure Aluminum Servingware Atelier'}
-          </p>
-        </div>
       </div>
     </div>
   )

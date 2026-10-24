@@ -15,11 +15,11 @@ export default function CategoriesPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <Breadcrumb
-        items={[{ label: locale === 'fa' ? 'دسته‌بندی‌ها' : 'Collections' }]}
+        items={[{ label: locale === 'fa' ? 'مجموعه‌ها' : 'Collections' }]}
       />
 
-      <h1 className="font-editorial text-3xl sm:text-4xl font-extrabold text-[#f7f4ee]">
-        {locale === 'fa' ? 'دسته‌بندی تولیدات آلومینیومی' : 'Aluminum Servingware Categories'}
+      <h1 className="text-2xl sm:text-4xl font-bold text-[#f2f2f0]">
+        {locale === 'fa' ? 'مجموعه‌های ظروف پذیرایی' : 'Servingware Collections'}
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -27,27 +27,26 @@ export default function CategoriesPage() {
           <Link
             key={cat.id}
             href={`/products?category=${cat.slug}`}
-            className="group relative h-72 overflow-hidden border border-[#ece6dc]/16 bg-[#141210]"
+            className="group rounded-2xl bg-[#14161a] border border-white/[0.07] hover:border-white/[0.18] overflow-hidden transition-colors"
           >
-            <img
-              src={cat.image}
-              alt={cat.name_fa}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0d0c0a]/92 via-[#0d0c0a]/30 to-transparent" />
-            <div className="absolute bottom-5 inset-x-6 flex items-end justify-between gap-4">
+            <div className="h-64 overflow-hidden bg-[#121317]">
+              <img
+                src={cat.image}
+                alt={cat.name_fa}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+            </div>
+            <div className="p-6 flex items-center justify-between gap-4">
               <div>
-                <span className="text-xs font-bold text-[#dfc08e]">
-                  {formatNumber(cat.product_count, locale)}{' '}
-                  {locale === 'fa' ? 'مدل تولیدی' : 'Models'}
-                </span>
-                <h2 className="font-editorial text-2xl sm:text-3xl font-extrabold text-[#f7f4ee] mt-0.5">
+                <h2 className="text-lg sm:text-xl font-bold text-[#f2f2f0] group-hover:text-[#d6b88a] transition-colors">
                   {locale === 'fa' ? cat.name_fa : cat.name}
                 </h2>
+                <span className="text-xs text-[#8e93a0] mt-1 block">
+                  {formatNumber(cat.product_count, locale)}{' '}
+                  {locale === 'fa' ? 'محصول' : 'Products'}
+                </span>
               </div>
-              <span className="p-2.5 bg-[#11100e]/85 border border-[#ece6dc]/20 text-[#dfc08e] group-hover:bg-[#c59b5f] group-hover:text-[#11100e] transition-colors">
-                <DirArrow className="w-4 h-4" />
-              </span>
+              <DirArrow className="w-5 h-5 text-[#7d828f] group-hover:text-[#d6b88a] transition-colors" />
             </div>
           </Link>
         ))}
