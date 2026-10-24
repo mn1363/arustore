@@ -76,29 +76,17 @@ function ProductsCatalogContent() {
         ]}
       />
 
-      {/* Editorial Catalog Masthead */}
-      <div className="border-b border-[#ece6dc]/15 pb-7 flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <div className="font-mono text-[10px] tracking-[0.22em] text-[#c59b5f] uppercase">
-            {locale === 'fa'
-              ? 'دفتر کل آثار // ریخته‌گری و آنودایز آلومینیوم'
-              : 'COMPLETE OBJECT ARCHIVE // 360° CAD'}
-          </div>
-          <h1 className="font-editorial text-4xl sm:text-6xl font-bold text-[#f7f4ee]">
-            {locale === 'fa' ? 'تالار ظروف پذیرایی آلومینیومی آرو' : 'AruStore Cast-Aluminum Archive'}
-          </h1>
-          <p className="text-xs sm:text-sm text-[#9e9589] max-w-2xl leading-relaxed">
-            {locale === 'fa'
-              ? 'هر ظرف دارای شناسنامه آلیاژ، انتخاب پوشش آنودایز و میز گردان سه‌بعدی ۳۶۰ درجه است.'
-              : 'Every vessel carries an alloy specification sheet, anodize finish selector, and 360° rotary inspection.'}
-          </p>
-        </div>
+      {/* Clean Compact Masthead */}
+      <div className="border-b border-[#ece6dc]/15 pb-5 flex flex-wrap items-end justify-between gap-4">
+        <h1 className="font-editorial text-3xl sm:text-4xl font-extrabold text-[#f7f4ee]">
+          {locale === 'fa' ? 'محصولات کارگاه آرو' : 'AruStore Workshop Products'}
+        </h1>
 
-        <div className="border border-[#ece6dc]/16 bg-[#161411] px-4 py-2.5 text-xs text-[#b9b0a2] font-mono">
-          <span className="font-bold text-[#dfc08e] text-base me-1.5">
+        <div className="border border-[#ece6dc]/16 bg-[#161411] px-3.5 py-2 text-xs text-[#b9b0a2]">
+          <span className="font-bold text-[#dfc08e] text-sm me-1.5">
             {formatNumber(total, locale)}
           </span>
-          {locale === 'fa' ? 'اثر آماده تحویل' : 'OBJECTS'}
+          {locale === 'fa' ? 'مدل آماده ارسال' : 'models'}
         </div>
       </div>
 

@@ -9,10 +9,10 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Vazirmatn', 'Inter', 'system-ui', 'sans-serif'],
-        editorial: ['Markazi Text', 'Cormorant Garamond', 'Vazirmatn', 'Georgia', 'serif'],
-        display: ['Cormorant Garamond', 'Markazi Text', 'Space Grotesk', 'serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        sans: ['"Arad FD"', 'Inter', 'system-ui', 'sans-serif'],
+        editorial: ['"Estedad FD"', '"Arad FD"', '"Cormorant Garamond"', 'sans-serif'],
+        display: ['"Estedad FD"', '"Arad FD"', '"Cormorant Garamond"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       colors: {
         obsidian: {

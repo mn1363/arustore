@@ -45,9 +45,9 @@ export default function Header() {
   }, [])
 
   const navLinks = [
-    { href: '/', label: locale === 'fa' ? 'تالار اصلی' : 'Salon' },
-    { href: '/products', label: locale === 'fa' ? 'آثار و ظروف' : 'Objects' },
-    { href: '/categories', label: locale === 'fa' ? 'مجموعه‌ها' : 'Collections' },
+    { href: '/', label: locale === 'fa' ? 'صفحه اصلی' : 'Home' },
+    { href: '/products', label: locale === 'fa' ? 'محصولات' : 'Products' },
+    { href: '/categories', label: locale === 'fa' ? 'دسته‌بندی‌ها' : 'Collections' },
     { href: '/orders', label: locale === 'fa' ? 'سفارش‌ها' : 'Orders' },
   ]
 
@@ -61,86 +61,56 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40">
-      {/* Top Foundry Specification Strip */}
-      <div className="bg-[#0b0a09] border-b border-[#ece6dc]/10 text-[11px] text-[#b9b0a2]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 truncate">
-            <span className="font-mono text-[10px] tracking-widest text-[#c59b5f] uppercase">
-              ALLOY 1070 · 99.7% AL
-            </span>
-            <span className="hidden sm:inline text-[#ece6dc]/20">|</span>
-            <span className="truncate">
-              {locale === 'fa'
-                ? 'ریخته‌گری شمش خالص خوراکی و آنودایز کوره‌ای ۲۲۰ درجه با ضمانت ۵ ساله'
-                : 'Pure food-safe cast aluminum · 220°C kiln anodize · 5-year guarantee'}
-            </span>
-          </div>
-          <div className="hidden md:flex items-center gap-4 flex-shrink-0 font-mono text-[10px] tracking-wider text-[#d8dce0]">
-            <span>{locale === 'fa' ? 'کد مستقیم کارگاه: ARU3D' : 'ATELIER CODE: ARU3D'}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Architectural Masthead */}
       <div
         className={cn(
           'border-b transition-colors duration-300 backdrop-blur-md',
           scrolled
             ? 'bg-[#11100e]/95 border-[#c59b5f]/30'
-            : 'bg-[#11100e]/88 border-[#ece6dc]/12'
+            : 'bg-[#11100e]/90 border-[#ece6dc]/12'
         )}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[4.5rem] flex items-center justify-between gap-6">
-          {/* Atelier Seal & Wordmark */}
-          <Link href="/" className="flex items-center gap-3.5 group flex-shrink-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[4.4rem] flex items-center justify-between gap-6">
+          {/* Brand */}
+          <Link href="/" className="flex items-center gap-3 group flex-shrink-0">
             <AruLogo3D className="w-10 h-10 group-hover:scale-105 transition-transform duration-300" />
-            <div className="leading-none">
-              <div className="font-editorial text-2xl sm:text-[1.7rem] font-bold tracking-tight text-[#f7f4ee] flex items-baseline gap-2">
-                <span>{dict.brandName}</span>
-                <span className="font-mono text-[9px] tracking-[0.22em] text-[#c59b5f] uppercase">
-                  ATELIER
-                </span>
+            <div>
+              <div className="font-editorial text-xl sm:text-2xl font-extrabold text-[#f7f4ee] leading-none">
+                {dict.brandName}
               </div>
-              <div className="text-[10px] text-[#9e9589] mt-0.5 hidden sm:block">
-                {locale === 'fa'
-                  ? 'صنایع فلزتراشی و ظروف پذیرایی آلومینیوم'
-                  : 'Architectural Cast-Aluminum Tableware'}
+              <div className="text-[11px] text-[#9e9589] mt-1 hidden sm:block">
+                {locale === 'fa' ? 'تولیدی ظروف آلومینیوم' : 'Cast-Aluminum Workshop'}
               </div>
             </div>
           </Link>
 
-          {/* Editorial Hairline Navigation */}
-          <nav className="hidden md:flex items-center h-full">
-            {navLinks.map((link, idx) => {
+          {/* Navigation */}
+          <nav className="hidden md:flex items-center h-full gap-1">
+            {navLinks.map((link) => {
               const active =
                 link.href === '/'
                   ? pathname === '/'
                   : pathname?.startsWith(link.href)
               return (
-                <React.Fragment key={link.href}>
-                  {idx > 0 && (
-                    <span className="h-3.5 w-px bg-[#ece6dc]/12 mx-1" aria-hidden="true" />
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={cn(
+                    'relative h-full px-4 flex items-center text-[13px] font-semibold transition-colors',
+                    active
+                      ? 'text-[#f7f4ee]'
+                      : 'text-[#a89f93] hover:text-[#f7f4ee]'
                   )}
-                  <Link
-                    href={link.href}
-                    className={cn(
-                      'relative h-full px-4 flex items-center text-xs sm:text-[13px] font-medium tracking-wide transition-colors',
-                      active
-                        ? 'text-[#f7f4ee]'
-                        : 'text-[#a89f93] hover:text-[#f7f4ee]'
-                    )}
-                  >
-                    <span>{link.label}</span>
-                    {active && (
-                      <span className="absolute bottom-0 inset-x-3 h-[2px] bg-[#c59b5f]" />
-                    )}
-                  </Link>
-                </React.Fragment>
+                >
+                  <span>{link.label}</span>
+                  {active && (
+                    <span className="absolute bottom-0 inset-x-3 h-[2px] bg-[#c59b5f]" />
+                  )}
+                </Link>
               )
             })}
           </nav>
 
-          {/* Precision Utility Controls */}
+          {/* Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setSearchOpen((v) => !v)}
@@ -153,9 +123,8 @@ export default function Header() {
             <button
               onClick={toggleLocale}
               className="px-2.5 py-2 rounded-[3px] border border-[#ece6dc]/12 hover:border-[#c59b5f]/50 font-mono text-[11px] font-semibold text-[#dfc08e] transition-colors"
-              title="تغییر زبان / Switch Language"
             >
-              {locale === 'fa' ? 'EN' : 'FA'}
+              {locale === 'fa' ? 'EN' : 'فا'}
             </button>
 
             <Link
@@ -173,10 +142,10 @@ export default function Header() {
 
             <Link
               href="/admin"
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 rounded-[3px] border border-[#ece6dc]/14 hover:border-[#c59b5f]/55 text-[11px] font-medium text-[#d6cfc4] hover:text-[#f7f4ee] transition-colors"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 rounded-[3px] border border-[#ece6dc]/14 hover:border-[#c59b5f]/55 text-xs font-medium text-[#d6cfc4] hover:text-[#f7f4ee] transition-colors"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-[#c59b5f]" />
-              <span>{locale === 'fa' ? 'دفتر کارگاه' : 'Foundry Desk'}</span>
+              <span>{locale === 'fa' ? 'پنل کارگاه' : 'Admin'}</span>
             </Link>
 
             <Link
@@ -187,16 +156,15 @@ export default function Header() {
               <User className="w-4 h-4" />
             </Link>
 
-            {/* Tactile Brushed-Metal Order Bag Trigger */}
             <button
               onClick={() => setCartDrawerOpen(true)}
               className="px-3.5 py-2 rounded-[3px] satin-brass-btn font-bold text-xs flex items-center gap-2 transition-all"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">
-                {locale === 'fa' ? 'سبد سفارش' : 'Order'}
+                {locale === 'fa' ? 'سبد خرید' : 'Bag'}
               </span>
-              <span className="font-mono text-[11px] px-1.5 py-0.2 bg-[#11100e]/15 rounded-[2px]">
+              <span className="text-[11px] px-1.5 bg-[#11100e]/15 rounded-[2px]">
                 {formatNumber(itemCount, locale)}
               </span>
             </button>
@@ -211,12 +179,11 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Expandable Search Drawer */}
         {searchOpen && (
           <div className="border-t border-[#ece6dc]/12 bg-[#171512]">
             <form
               onSubmit={handleSearchSubmit}
-              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center gap-3"
+              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3"
             >
               <Search className="w-4 h-4 text-[#c59b5f] flex-shrink-0" />
               <input
@@ -226,8 +193,8 @@ export default function Header() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={
                   locale === 'fa'
-                    ? 'جستجوی شیرینی‌خوری، میوه‌خوری، کشکول، سینی آلومینیوم...'
-                    : 'Search stands, fluted bowls, trays, kashkools...'
+                    ? 'جستجوی شیرینی‌خوری، میوه‌خوری، سینی، کشکول...'
+                    : 'Search stands, bowls, trays, kashkools...'
                 }
                 className="w-full bg-transparent text-sm text-[#f7f4ee] placeholder:text-[#8c8377] focus:outline-none"
               />
@@ -235,13 +202,12 @@ export default function Header() {
                 type="submit"
                 className="px-4 py-1.5 rounded-[2px] satin-brass-btn text-xs font-bold flex-shrink-0"
               >
-                {locale === 'fa' ? 'جستجو' : 'Find'}
+                {locale === 'fa' ? 'جستجو' : 'Search'}
               </button>
             </form>
           </div>
         )}
 
-        {/* Mobile Drawer */}
         {mobileOpen && (
           <div className="md:hidden border-t border-[#ece6dc]/12 bg-[#141311] px-4 py-4 space-y-2">
             {navLinks.map((link) => (
@@ -254,22 +220,6 @@ export default function Header() {
                 {link.label}
               </Link>
             ))}
-            <div className="pt-2 flex items-center gap-3">
-              <Link
-                href="/wishlist"
-                onClick={() => setMobileOpen(false)}
-                className="flex-1 py-2 text-center rounded-[3px] border border-[#ece6dc]/15 text-xs text-[#d6cfc4]"
-              >
-                {dict.nav.wishlist} ({formatNumber(wishlistIds.length, locale)})
-              </Link>
-              <Link
-                href="/admin"
-                onClick={() => setMobileOpen(false)}
-                className="flex-1 py-2 text-center rounded-[3px] border border-[#c59b5f]/40 text-xs text-[#dfc08e]"
-              >
-                {dict.nav.admin}
-              </Link>
-            </div>
           </div>
         )}
       </div>

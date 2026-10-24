@@ -25,14 +25,22 @@ html {
 body {
   background-color: #11100e;
   color: #f3efe8;
-  font-family: 'Vazirmatn', 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Arad FD', 'Inter', system-ui, -apple-system, sans-serif;
+  font-variation-settings: 'DSTY' 1;
   overflow-x: hidden;
   min-height: 100vh;
 }
 
-/* Subtle tactile mineral & brushed-metal grain overlay (no SaaS grid) */
+/* Sleek Modern Persian Display Typography with Subtle Kashida Curves */
+.font-editorial {
+  font-family: 'Estedad FD', 'Arad FD', 'Cormorant Garamond', sans-serif;
+  font-variation-settings: 'KSHD' 116;
+  letter-spacing: -0.01em;
+}
+
+/* Subtle tactile mineral grain */
 .foundry-grain {
-  background-image: radial-gradient(rgba(236, 230, 220, 0.035) 1px, transparent 0);
+  background-image: radial-gradient(rgba(236, 230, 220, 0.03) 1px, transparent 0);
   background-size: 24px 24px;
 }
 
@@ -48,7 +56,7 @@ body {
   );
   color: #141311;
   box-shadow:
-    0 12px 28px -12px rgba(197, 155, 95, 0.45),
+    0 12px 28px -12px rgba(197, 155, 95, 0.42),
     inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
@@ -60,11 +68,10 @@ body {
   background: linear-gradient(135deg, #dfc08e 0%, #c59b5f 55%, #a87e43 100%);
   color: #141311;
   box-shadow:
-    0 10px 26px -10px rgba(197, 155, 95, 0.4),
+    0 10px 26px -10px rgba(197, 155, 95, 0.38),
     inset 0 1px 0 rgba(255, 248, 235, 0.55);
 }
 
-/* Custom Warm Foundry Scrollbar */
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
@@ -106,14 +113,13 @@ body {
 }
 
 .translate-z-20 {
-  transform: translateZ(24px);
+  transform: translateZ(22px);
 }
 
 .translate-z-30 {
-  transform: translateZ(38px);
+  transform: translateZ(34px);
 }
 
-/* Warm Smoked Basalt Atelier Surfaces (replacing cold blue SaaS glass) */
 .glass-panel {
   background: linear-gradient(
     165deg,
@@ -133,7 +139,6 @@ body {
   border: 1px solid rgba(236, 230, 220, 0.16);
 }
 
-/* Persian Architectural Arch Niche (Chahar-Taq / Gallery Pedestal) */
 .arch-niche {
   border-top-left-radius: 9999px;
   border-top-right-radius: 9999px;
@@ -141,7 +146,6 @@ body {
   border-bottom-right-radius: 2px;
 }
 
-/* Technical Corner Registration Marks */
 .atelier-corners {
   position: relative;
 }
@@ -152,7 +156,6 @@ body {
   width: 10px;
   height: 10px;
   pointer-events: none;
-  border-color: rgba(197, 155, 95, 0.55);
 }
 .atelier-corners::before {
   top: -1px;

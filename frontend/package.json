@@ -9,9 +9,11 @@
     "lint": "node ./node_modules/next/dist/bin/next lint"
   },
   "dependencies": {
+    "@fontsource-variable/estedad": "^5.3.0",
     "@fontsource/cormorant-garamond": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/lalezar": "^5.3.0",
     "@fontsource/markazi-text": "^5.3.0",
     "@fontsource/space-grotesk": "^5.3.0",
     "@fontsource/vazirmatn": "^5.3.0",
@@ -22,6 +24,7 @@
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.395.0",
     "next": "14.0.3",
+    "next-persian-fonts": "^1.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwind-merge": "^2.3.0",
