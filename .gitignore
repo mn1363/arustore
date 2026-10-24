@@ -4,6 +4,10 @@ out/
 dist/
 build/
 __pycache__/
+.pytest_cache/
+*.pyc
+*.db
+*.sqlite3
 .venv/
 venv/
 *.node

@@ -1,5 +1,3 @@
-# Update docker-compose.yml to remove version warning
-@"
 services:
   postgres:
     image: postgres:15-alpine
@@ -121,6 +119,7 @@ services:
       - MINIO_SECRET_KEY=minioadmin123
       - CELERY_BROKER_URL=amqp://aruuser:arupassword123@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://:redispassword123@redis:6379/1
+      - CELERY_TASK_ALWAYS_EAGER=false
       - SECRET_KEY=your-super-secret-key-change-this-in-production
       - CORS_ORIGINS=["http://localhost:3000"]
     ports:
@@ -155,6 +154,7 @@ services:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - CELERY_BROKER_URL=amqp://aruuser:arupassword123@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://:redispassword123@redis:6379/1
+      - CELERY_TASK_ALWAYS_EAGER=false
     depends_on:
       - rabbitmq
       - redis
@@ -177,6 +177,7 @@ services:
       - REDIS_URL=redis://:redispassword123@redis:6379/0
       - CELERY_BROKER_URL=amqp://aruuser:arupassword123@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=redis://:redispassword123@redis:6379/1
+      - CELERY_TASK_ALWAYS_EAGER=false
     depends_on:
       - rabbitmq
       - redis
@@ -193,7 +194,8 @@ services:
       dockerfile: Dockerfile
     container_name: arustore-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_API_URL=/api/v1
+      - BACKEND_INTERNAL_URL=http://backend:8000
     ports:
       - "3000:3000"
     depends_on:
@@ -223,4 +225,3 @@ volumes:
     driver: local
   rabbitmq_data:
     driver: local
-"@ | Out-File -FilePath "docker-compose.yml" -Encoding UTF8
