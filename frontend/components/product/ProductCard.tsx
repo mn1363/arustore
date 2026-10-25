@@ -1,120 +1,265 @@
-import Image from 'next/image'
+'use client'
+
+import React, { useState } from 'react'
 import Link from 'next/link'
-import { Heart, ShoppingBag, Star } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import Button from '@/components/ui/Button'
+import { Box, Heart, Plus, ShoppingBag } from 'lucide-react'
+import Card3DTilt from '@/components/ui/Card3DTilt'
+import { cn, formatPrice, getProductTitle } from '@/lib/utils'
 import { Product } from '@/types'
+import {
+  getProductPrimaryFinish,
+  isProductAvailable,
+} from '@/lib/data/catalog'
+import { useStore } from '@/lib/store/useStore'
+import { getDict } from '@/lib/data/i18n'
 
 interface ProductCardProps {
   product: Product
   variant?: 'grid' | 'list'
+  tone?: 'dark' | 'stone'
+  indexNumber?: number
   className?: string
 }
 
-export default function ProductCard({ product, variant = 'grid', className }: ProductCardProps) {
-  const discount = product.compare_price 
-    ? Math.round(((product.compare_price - product.price) / product.compare_price) * 100)
-    : 0
+export default function ProductCard({
+  product,
+  variant = 'grid',
+  className,
+}: ProductCardProps) {
+  const locale = useStore((s) => s.locale)
+  const addToCart = useStore((s) => s.addToCart)
+  const wishlistIds = useStore((s) => s.wishlistIds)
+  const toggleWishlist = useStore((s) => s.toggleWishlist)
+  const setQuickViewProduct = useStore((s) => s.setQuickViewProduct)
+  const dict = getDict(locale)
 
-  return (
-    <div className={cn(
-      'card group relative',
-      variant === 'grid' ? 'p-4' : 'p-4 flex gap-6',
-      className
-    )}>
-      {/* Wishlist Button */}
-      <button className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white transition-colors">
-        <Heart className="w-5 h-5 text-gray-400 hover:text-red-500 transition-colors" />
-      </button>
-      
-      {/* Discount Badge */}
-      {discount > 0 && (
-        <div className="absolute top-3 left-3 z-10 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
-          {discount}% OFF
-        </div>
-      )}
-      
-      <Link href={`/product/${product.slug}`} className={cn(
-        'flex',
-        variant === 'grid' ? 'flex-col' : 'flex-row items-center'
-      )}>
-        {/* Image */}
-        <div className={cn(
-          'relative overflow-hidden rounded-lg bg-gray-100',
-          variant === 'grid' ? 'w-full aspect-square' : 'w-48 h-48 flex-shrink-0'
-        )}>
-          {product.images && product.images[0] && (
-            <Image
-              src={product.images[0].url}
-              alt={product.name}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
+  const [colorIdx, setColorIdx] = useState(0)
+  const activeColor = getProductPrimaryFinish(product, colorIdx)
+  const available = isProductAvailable(product)
+  const primaryImage = product.images[0]?.url
+  const isWishlisted = wishlistIds.includes(product.id)
+
+  if (variant === 'list') {
+    return (
+      <div
+        className={cn(
+          'rounded-2xl card-level-2 overflow-hidden flex flex-col sm:flex-row items-stretch group',
+          className
+        )}
+      >
+        <Link
+          href={`/product/${product.slug}`}
+          className="relative w-full sm:w-64 h-48 sm:h-auto overflow-hidden flex-shrink-0 product-pedestal-stage"
+        >
+          {primaryImage ? (
+            <img
+              src={primaryImage}
+              alt={getProductTitle(product, locale)}
+              loading="lazy"
+              className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
             />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[#dfc08e]/50">
+              <Box className="w-10 h-10" />
+            </div>
           )}
-        </div>
-        
-        {/* Info */}
-        <div className={cn(
-          'flex-1',
-          variant === 'grid' ? 'mt-3 space-y-1' : 'ml-4 space-y-2'
-        )}>
-          {/* Brand */}
-          {product.brand && (
-            <span className="text-xs text-gray-500 uppercase tracking-wider">
-              {product.brand.name}
-            </span>
-          )}
-          
-          {/* Name */}
-          <h3 className={cn(
-            'font-medium text-gray-800 line-clamp-2',
-            variant === 'grid' ? 'text-sm' : 'text-base'
-          )}>
-            {product.name}
-          </h3>
-          
-          {/* Rating */}
-          <div className="flex items-center gap-1">
-            <Star className="w-4 h-4 text-yellow-400 fill-current" />
-            <span className="text-sm font-medium">{product.rating_avg?.toFixed(1) || '0'}</span>
-            <span className="text-xs text-gray-400">({product.rating_count || 0})</span>
-          </div>
-          
-          {/* Price */}
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-gray-900">
-              ${product.price.toFixed(2)}
-            </span>
-            {product.compare_price && (
-              <span className="text-sm text-gray-400 line-through">
-                ${product.compare_price.toFixed(2)}
-              </span>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#08090f]/75 to-transparent"
+          />
+        </Link>
+
+        <div className="flex-1 p-5 flex flex-col justify-between gap-4">
+          <div className="space-y-2.5">
+            <Link href={`/product/${product.slug}`}>
+              <h3 className="text-lg font-bold text-[#f4f4f6] hover:text-[#dfc08e] transition-colors">
+                {getProductTitle(product, locale)}
+              </h3>
+            </Link>
+            {product.colors.length > 0 && (
+              <div className="flex items-center gap-2">
+                {product.colors.map((c, idx) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setColorIdx(idx)}
+                    aria-label={locale === 'fa' ? c.name_fa : c.name}
+                    className={cn(
+                      'w-4 h-4 rounded-full border transition-transform',
+                      colorIdx === idx
+                        ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.45)]'
+                        : 'border-white/25 opacity-70 hover:opacity-100'
+                    )}
+                    style={{
+                      background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
+                    }}
+                  />
+                ))}
+              </div>
             )}
           </div>
-          
-          {/* Stock Status */}
-          {product.stock_quantity > 0 ? (
-            <span className="text-xs text-green-600">In Stock</span>
-          ) : (
-            <span className="text-xs text-red-500">Out of Stock</span>
-          )}
+
+          <div className="flex items-center justify-between gap-4 pt-3 border-t border-white/[0.07]">
+            <div className="flex items-baseline gap-2">
+              <span className="text-base font-bold text-[#dfc08e]">
+                {formatPrice(product.price, locale, product.price_toman)}
+              </span>
+              {product.compare_price && product.compare_price > product.price && (
+                <span className="text-xs text-[#6e768a] line-through">
+                  {formatPrice(
+                    product.compare_price,
+                    locale,
+                    product.compare_price_toman
+                  )}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setQuickViewProduct(product)}
+                className="px-3.5 py-2 rounded-xl secondary-3d-btn text-xs flex items-center gap-1.5"
+              >
+                <Box className="w-3.5 h-3.5 text-[#dfc08e]" />
+                <span>3D</span>
+              </button>
+              <button
+                onClick={() => addToCart(product, 1, activeColor)}
+                disabled={!available}
+                className="px-4 py-2 rounded-xl champagne-btn font-bold text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>
+                  {available
+                    ? dict.common.addToCart
+                    : locale === 'fa'
+                    ? 'ناموجود'
+                    : 'Out of stock'}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
-      </Link>
-      
-      {/* Add to Cart Button */}
-      {product.stock_quantity > 0 && (
-        <Button 
-          variant="accent" 
-          size="sm"
-          className={cn(
-            'w-full mt-3',
-            variant === 'list' && 'mt-0'
-          )}
-        >
-          <ShoppingBag className="w-4 h-4 mr-2" />
-          Add to Cart
-        </Button>
-      )}
-    </div>
+      </div>
+    )
+  }
+
+  return (
+    <Card3DTilt className={cn('rounded-2xl h-full', className)}>
+      <article className="rounded-2xl card-level-2 overflow-hidden flex flex-col justify-between group h-full">
+        {/* Dimensional Pedestal Image Stage (Real Product Undistorted) */}
+        <div className="relative aspect-[16/11] w-full overflow-hidden product-pedestal-stage border-b border-white/[0.06]">
+          <Link href={`/product/${product.slug}`} className="block w-full h-full">
+            {primaryImage ? (
+              <img
+                src={primaryImage}
+                alt={getProductTitle(product, locale)}
+                loading="lazy"
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[#dfc08e]/50">
+                <Box className="w-10 h-10" />
+              </div>
+            )}
+          </Link>
+
+          {/* Subtle Environmental Rim & Ground Shadow */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-16 opacity-80 transition-opacity duration-300 group-hover:opacity-100"
+            style={{
+              background: `linear-gradient(to top, rgba(10, 12, 20, 0.72) 0%, transparent 100%)`,
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 w-2/3 h-8 rounded-full blur-xl opacity-0 group-hover:opacity-55 transition-opacity duration-500"
+            style={{ backgroundColor: activeColor.accentHex }}
+          />
+
+          {/* Floating Level-4 Utility Pills */}
+          <div className="absolute top-3 end-3 z-10 flex items-center gap-1.5 opacity-95 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity duration-200">
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                setQuickViewProduct(product)
+              }}
+              title={dict.common.quickView3D}
+              aria-label={dict.common.quickView3D}
+              className="p-2 rounded-full glass-pill text-[#e8ebf2] hover:text-[#dfc08e] transition-colors"
+            >
+              <Box className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                void toggleWishlist(product.id, product)
+              }}
+              aria-label="Wishlist"
+              className={cn(
+                'p-2 rounded-full glass-pill transition-colors',
+                isWishlisted ? 'text-[#dfc08e]' : 'text-[#e8ebf2] hover:text-white'
+              )}
+            >
+              <Heart className={cn('w-3.5 h-3.5', isWishlisted && 'fill-current')} />
+            </button>
+          </div>
+        </div>
+
+        {/* Clear Product Hierarchy: Title -> Swatches -> Price -> Physical CTA */}
+        <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-4">
+          <div className="space-y-2.5">
+            <Link href={`/product/${product.slug}`} className="block">
+              <h3 className="text-base font-bold text-[#f4f4f6] group-hover:text-[#dfc08e] transition-colors line-clamp-1">
+                {getProductTitle(product, locale)}
+              </h3>
+            </Link>
+
+            {product.colors.length > 0 && (
+              <div className="flex items-center gap-2">
+                {product.colors.map((c, idx) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setColorIdx(idx)}
+                    title={locale === 'fa' ? c.name_fa : c.name}
+                    aria-label={locale === 'fa' ? c.name_fa : c.name}
+                    className={cn(
+                      'w-3.5 h-3.5 rounded-full border transition-transform',
+                      colorIdx === idx
+                        ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.4)]'
+                        : 'border-white/25 opacity-70 hover:opacity-100'
+                    )}
+                    style={{
+                      background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-3.5 border-t border-white/[0.07] flex items-center justify-between gap-2">
+            <span className="text-sm sm:text-base font-bold text-[#dfc08e]">
+              {formatPrice(product.price, locale, product.price_toman)}
+            </span>
+
+            <button
+              onClick={() => addToCart(product, 1, activeColor)}
+              disabled={!available}
+              className="px-3.5 py-1.5 rounded-xl champagne-btn text-xs font-bold flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {available ? (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{locale === 'fa' ? 'افزودن' : 'Add'}</span>
+                </>
+              ) : (
+                <span>{locale === 'fa' ? 'ناموجود' : 'Sold out'}</span>
+              )}
+            </button>
+          </div>
+        </div>
+      </article>
+    </Card3DTilt>
   )
 }

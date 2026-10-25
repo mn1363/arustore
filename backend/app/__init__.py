@@ -1,0 +1,1 @@
+"""AruStore FastAPI application package."""
