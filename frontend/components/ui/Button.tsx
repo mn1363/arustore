@@ -11,14 +11,12 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading, children, ...props }, ref) => {
     const variants = {
       primary: 'champagne-btn font-bold',
-      accent:
-        'bg-[#d6b88a]/15 text-[#ead7b7] border border-[#d6b88a]/35 hover:bg-[#d6b88a] hover:text-[#111215] font-semibold',
+      accent: 'secondary-3d-btn text-[#ead7b7] font-semibold',
       neon: 'champagne-btn font-bold',
-      secondary:
-        'bg-white/[0.06] text-[#f2f2f0] border border-white/[0.08] hover:bg-white/[0.1]',
+      secondary: 'secondary-3d-btn font-medium',
       outline:
-        'border border-white/15 text-[#d4d6dc] hover:border-white/30 hover:text-white bg-transparent',
-      ghost: 'text-[#b4b8c2] hover:bg-white/[0.06] hover:text-white',
+        'border border-white/15 text-[#d4d6dc] hover:border-[#dfc08e]/45 hover:text-white bg-white/[0.02]',
+      ghost: 'text-[#b4bccf] hover:bg-white/[0.06] hover:text-white',
     }
 
     const sizes = {
@@ -31,7 +29,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed',
+          'inline-flex items-center justify-center select-none focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed',
           variants[variant],
           sizes[size],
           className

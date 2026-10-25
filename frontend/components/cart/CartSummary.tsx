@@ -46,22 +46,22 @@ export default function CartSummary() {
   }
 
   return (
-    <div className="rounded-2xl bg-[#14161a] p-6 border border-white/[0.07] space-y-5 h-fit sticky top-24">
-      <h3 className="text-lg font-bold text-[#f2f2f0]">
+    <div className="rounded-3xl glass-panel p-6 space-y-5 h-fit sticky top-24">
+      <h3 className="text-lg font-bold text-[#f4f4f6]">
         {locale === 'fa' ? 'خلاصه سفارش' : 'Order Summary'}
       </h3>
 
       {promoCode ? (
-        <div className="rounded-xl bg-white/[0.05] border border-white/10 px-4 py-3 flex items-center justify-between text-xs text-[#f2f2f0]">
+        <div className="rounded-xl bg-[#1a2030] border border-[#dfc08e]/35 px-4 py-3 flex items-center justify-between text-xs text-[#f4f4f6]">
           <div className="flex items-center gap-2 font-bold">
-            <Tag className="w-4 h-4 text-[#d6b88a]" />
+            <Tag className="w-4 h-4 text-[#dfc08e]" />
             <span>
               {promoCode} (-{promoPercent}%)
             </span>
           </div>
           <button
             onClick={removePromoCode}
-            className="text-[#9ca0ab] hover:text-white underline"
+            className="text-[#979fb2] hover:text-white underline"
           >
             {locale === 'fa' ? 'حذف' : 'Remove'}
           </button>
@@ -73,12 +73,12 @@ export default function CartSummary() {
             dir="ltr"
             value={codeInput}
             onChange={(e) => setCodeInput(e.target.value)}
-            placeholder={locale === 'fa' ? 'کد تخفیف' : 'Promo code'}
-            className="flex-1 rounded-xl bg-[#0d0e11] border border-white/10 px-3.5 py-2 text-xs text-white placeholder:text-[#666b78] focus:outline-none focus:border-white/25"
+            placeholder={locale === 'fa' ? 'کد تخفیف (مثلاً ARU3D)' : 'Promo code'}
+            className="flex-1 rounded-xl bg-[#0a0c14] border border-white/[0.1] px-3.5 py-2 text-xs text-white placeholder:text-[#666e82] focus:outline-none focus:border-[#dfc08e]/60"
           />
           <button
             type="submit"
-            className="px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-bold text-[#f2f2f0]"
+            className="px-4 py-2 rounded-xl secondary-3d-btn text-xs font-bold"
           >
             {locale === 'fa' ? 'ثبت' : 'Apply'}
           </button>
@@ -86,7 +86,7 @@ export default function CartSummary() {
       )}
 
       <div className="space-y-3 pt-3 border-t border-white/[0.07] text-sm">
-        <div className="flex justify-between text-[#b4b8c2]">
+        <div className="flex justify-between text-[#b4bccf]">
           <span>{dict.common.subtotal}</span>
           <span className="font-semibold">
             {formatPrice(subtotalUsd, locale, subtotalToman)}
@@ -94,7 +94,7 @@ export default function CartSummary() {
         </div>
 
         {discountUsd > 0 && (
-          <div className="flex justify-between text-[#d6b88a]">
+          <div className="flex justify-between text-[#dfc08e]">
             <span>{dict.common.discount}</span>
             <span className="font-semibold">
               - {formatPrice(discountUsd, locale, discountToman)}
@@ -102,16 +102,16 @@ export default function CartSummary() {
           </div>
         )}
 
-        <div className="flex justify-between text-[#b4b8c2]">
+        <div className="flex justify-between text-[#b4bccf]">
           <span>{locale === 'fa' ? 'ارسال' : 'Shipping'}</span>
-          <span className="text-[#d6b88a] font-bold">
+          <span className="text-[#dfc08e] font-bold">
             {locale === 'fa' ? 'رایگان' : 'Free'}
           </span>
         </div>
 
         <div className="pt-3 border-t border-white/[0.07] flex justify-between items-center">
-          <span className="font-bold text-[#f2f2f0]">{dict.common.total}</span>
-          <span className="text-lg font-bold text-[#d6b88a]">
+          <span className="font-bold text-[#f4f4f6]">{dict.common.total}</span>
+          <span className="text-lg font-bold text-[#dfc08e]">
             {formatPrice(totalUsd, locale, totalToman)}
           </span>
         </div>
@@ -119,18 +119,18 @@ export default function CartSummary() {
 
       <Link
         href="/checkout"
-        className="w-full py-3.5 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+        className="w-full py-3.5 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2"
       >
         {dict.common.checkout}
       </Link>
 
-      <div className="pt-2 space-y-2 text-xs text-[#8e93a0]">
+      <div className="pt-2 space-y-2 text-xs text-[#979fb2]">
         <div className="flex items-center gap-2">
-          <Truck className="w-4 h-4 text-[#d6b88a] flex-shrink-0" />
+          <Truck className="w-4 h-4 text-[#dfc08e] flex-shrink-0" />
           <span>{dict.common.freeShipping}</span>
         </div>
         <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-[#d6b88a] flex-shrink-0" />
+          <ShieldCheck className="w-4 h-4 text-[#dfc08e] flex-shrink-0" />
           <span>
             {locale === 'fa'
               ? 'ضمانت سلامت فیزیکی و ۵ سال ثبات رنگ'

@@ -18,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
-      <body className="bg-[#0d0e11] text-[#f2f2f0] antialiased selection:bg-[#d6b88a] selection:text-[#0d0e11]">
+      <body className="bg-[#08090f] text-[#f4f4f6] antialiased selection:bg-[#dfc08e] selection:text-[#08090f]">
         <div className="min-h-screen flex flex-col">
           {children}
         </div>

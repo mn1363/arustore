@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { Box, Heart, Plus, ShoppingBag } from 'lucide-react'
+import Card3DTilt from '@/components/ui/Card3DTilt'
 import { cn, formatPrice, getProductTitle } from '@/lib/utils'
 import { Product } from '@/types'
 import { useStore } from '@/lib/store/useStore'
@@ -36,36 +37,42 @@ export default function ProductCard({
     return (
       <div
         className={cn(
-          'rounded-2xl bg-[#14161a] border border-white/[0.07] hover:border-white/[0.16] overflow-hidden flex flex-col sm:flex-row items-stretch transition-colors group',
+          'rounded-2xl card-level-2 overflow-hidden flex flex-col sm:flex-row items-stretch group',
           className
         )}
       >
         <Link
           href={`/product/${product.slug}`}
-          className="relative w-full sm:w-64 h-48 sm:h-auto overflow-hidden flex-shrink-0 bg-[#121317]"
+          className="relative w-full sm:w-64 h-48 sm:h-auto overflow-hidden flex-shrink-0 product-pedestal-stage"
         >
           <img
             src={product.images[0]?.url}
             alt={getProductTitle(product, locale)}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+            className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#08090f]/75 to-transparent"
           />
         </Link>
 
         <div className="flex-1 p-5 flex flex-col justify-between gap-4">
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <Link href={`/product/${product.slug}`}>
-              <h3 className="text-lg font-bold text-[#f2f2f0] hover:text-[#d6b88a] transition-colors">
+              <h3 className="text-lg font-bold text-[#f4f4f6] hover:text-[#dfc08e] transition-colors">
                 {getProductTitle(product, locale)}
               </h3>
             </Link>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               {product.colors.map((c, idx) => (
                 <button
                   key={c.id}
                   onClick={() => setColorIdx(idx)}
+                  aria-label={locale === 'fa' ? c.name_fa : c.name}
                   className={cn(
                     'w-4 h-4 rounded-full border transition-transform',
-                    colorIdx === idx ? 'scale-125 border-white' : 'border-white/20 opacity-70'
+                    colorIdx === idx ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.45)]' : 'border-white/25 opacity-70 hover:opacity-100'
                   )}
                   style={{
                     background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
@@ -75,17 +82,17 @@ export default function ProductCard({
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-4 pt-3 border-t border-white/[0.06]">
-            <div className="text-base font-bold text-[#f2f2f0]">
+          <div className="flex items-center justify-between gap-4 pt-3 border-t border-white/[0.07]">
+            <div className="text-base font-bold text-[#dfc08e]">
               {formatPrice(product.price, locale, product.price_toman)}
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setQuickViewProduct(product)}
-                className="px-3 py-2 rounded-xl border border-white/10 text-xs text-[#d4d6dc] hover:border-white/25 flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl secondary-3d-btn text-xs flex items-center gap-1.5"
               >
-                <Box className="w-3.5 h-3.5" />
+                <Box className="w-3.5 h-3.5 text-[#dfc08e]" />
                 <span>3D</span>
               </button>
               <button
@@ -103,94 +110,108 @@ export default function ProductCard({
   }
 
   return (
-    <div
-      className={cn(
-        'rounded-2xl bg-[#14161a] border border-white/[0.07] hover:border-white/[0.16] overflow-hidden flex flex-col justify-between transition-all duration-300 group h-full',
-        className
-      )}
-    >
-      {/* Seamless Studio Packshot Stage */}
-      <div className="relative aspect-[16/11] w-full overflow-hidden bg-[#121317]">
-        <Link href={`/product/${product.slug}`} className="block w-full h-full">
-          <img
-            src={product.images[0]?.url}
-            alt={getProductTitle(product, locale)}
-            className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
-          />
-        </Link>
-
-        {/* Quiet Corner Icons */}
-        <div className="absolute top-3 end-3 z-10 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => {
-              e.preventDefault()
-              setQuickViewProduct(product)
-            }}
-            title={dict.common.quickView3D}
-            className="p-2 rounded-full bg-[#0d0e11]/80 backdrop-blur-md border border-white/10 text-[#e4e6eb] hover:text-[#d6b88a] transition-colors"
-          >
-            <Box className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.preventDefault()
-              toggleWishlist(product.id)
-            }}
-            aria-label="Wishlist"
-            className={cn(
-              'p-2 rounded-full bg-[#0d0e11]/80 backdrop-blur-md border border-white/10 transition-colors',
-              isWishlisted ? 'text-[#d6b88a]' : 'text-[#e4e6eb]'
-            )}
-          >
-            <Heart className={cn('w-3.5 h-3.5', isWishlisted && 'fill-current')} />
-          </button>
-        </div>
-      </div>
-
-      {/* Minimal Calm Footer */}
-      <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-4">
-        <div className="space-y-2.5">
-          <Link href={`/product/${product.slug}`} className="block">
-            <h3 className="text-base font-bold text-[#f2f2f0] group-hover:text-[#d6b88a] transition-colors line-clamp-1">
-              {getProductTitle(product, locale)}
-            </h3>
+    <Card3DTilt className={cn('rounded-2xl h-full', className)}>
+      <article className="rounded-2xl card-level-2 overflow-hidden flex flex-col justify-between group h-full">
+        {/* Dimensional Pedestal Image Stage (Real Product Undistorted) */}
+        <div className="relative aspect-[16/11] w-full overflow-hidden product-pedestal-stage border-b border-white/[0.06]">
+          <Link href={`/product/${product.slug}`} className="block w-full h-full">
+            <img
+              src={product.images[0]?.url}
+              alt={getProductTitle(product, locale)}
+              loading="lazy"
+              className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
+            />
           </Link>
 
-          <div className="flex items-center gap-1.5">
-            {product.colors.map((c, idx) => (
-              <button
-                key={c.id}
-                onClick={() => setColorIdx(idx)}
-                title={locale === 'fa' ? c.name_fa : c.name}
-                className={cn(
-                  'w-3.5 h-3.5 rounded-full border transition-transform',
-                  colorIdx === idx
-                    ? 'scale-125 border-white'
-                    : 'border-white/20 opacity-65 hover:opacity-100'
-                )}
-                style={{
-                  background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
-                }}
-              />
-            ))}
+          {/* Subtle Environmental Rim & Ground Shadow */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-16 opacity-80 transition-opacity duration-300 group-hover:opacity-100"
+            style={{
+              background: `linear-gradient(to top, rgba(10, 12, 20, 0.72) 0%, transparent 100%)`,
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 w-2/3 h-8 rounded-full blur-xl opacity-0 group-hover:opacity-55 transition-opacity duration-500"
+            style={{ backgroundColor: activeColor.accentHex }}
+          />
+
+          {/* Floating Level-4 Utility Pills */}
+          <div className="absolute top-3 end-3 z-10 flex items-center gap-1.5 opacity-95 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity duration-200">
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                setQuickViewProduct(product)
+              }}
+              title={dict.common.quickView3D}
+              aria-label={dict.common.quickView3D}
+              className="p-2 rounded-full glass-pill text-[#e8ebf2] hover:text-[#dfc08e] transition-colors"
+            >
+              <Box className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                toggleWishlist(product.id)
+              }}
+              aria-label="Wishlist"
+              className={cn(
+                'p-2 rounded-full glass-pill transition-colors',
+                isWishlisted ? 'text-[#dfc08e]' : 'text-[#e8ebf2] hover:text-white'
+              )}
+            >
+              <Heart className={cn('w-3.5 h-3.5', isWishlisted && 'fill-current')} />
+            </button>
           </div>
         </div>
 
-        <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
-          <span className="text-sm font-bold text-[#f2f2f0]">
-            {formatPrice(product.price, locale, product.price_toman)}
-          </span>
+        {/* Clear Product Hierarchy: Title -> Swatches -> Price -> Physical CTA */}
+        <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-4">
+          <div className="space-y-2.5">
+            <Link href={`/product/${product.slug}`} className="block">
+              <h3 className="text-base font-bold text-[#f4f4f6] group-hover:text-[#dfc08e] transition-colors line-clamp-1">
+                {getProductTitle(product, locale)}
+              </h3>
+            </Link>
 
-          <button
-            onClick={() => addToCart(product, 1, activeColor)}
-            disabled={product.stock_quantity <= 0}
-            className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-[#d6b88a] text-[#e4e6eb] hover:text-[#111215] text-xs font-semibold transition-colors flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{locale === 'fa' ? 'افزودن' : 'Add'}</span>
-          </button>
+            <div className="flex items-center gap-2">
+              {product.colors.map((c, idx) => (
+                <button
+                  key={c.id}
+                  onClick={() => setColorIdx(idx)}
+                  title={locale === 'fa' ? c.name_fa : c.name}
+                  aria-label={locale === 'fa' ? c.name_fa : c.name}
+                  className={cn(
+                    'w-3.5 h-3.5 rounded-full border transition-transform',
+                    colorIdx === idx
+                      ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.4)]'
+                      : 'border-white/25 opacity-70 hover:opacity-100'
+                  )}
+                  style={{
+                    background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-3.5 border-t border-white/[0.07] flex items-center justify-between gap-2">
+            <span className="text-sm sm:text-base font-bold text-[#dfc08e]">
+              {formatPrice(product.price, locale, product.price_toman)}
+            </span>
+
+            <button
+              onClick={() => addToCart(product, 1, activeColor)}
+              disabled={product.stock_quantity <= 0}
+              className="px-3.5 py-1.5 rounded-xl champagne-btn text-xs font-bold flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{locale === 'fa' ? 'افزودن' : 'Add'}</span>
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
+      </article>
+    </Card3DTilt>
   )
 }

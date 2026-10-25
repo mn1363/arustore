@@ -17,9 +17,9 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
-        <div className="rounded-2xl bg-[#14161a] p-10 border border-white/[0.08] space-y-5">
-          <User className="w-10 h-10 text-[#d6b88a] mx-auto" />
-          <h1 className="text-xl font-bold text-[#f2f2f0]">
+        <div className="rounded-3xl glass-panel p-10 space-y-5">
+          <User className="w-10 h-10 text-[#dfc08e] mx-auto" />
+          <h1 className="text-xl font-bold text-[#f4f4f6]">
             {locale === 'fa' ? 'ورود به حساب کاربری' : 'Sign In Required'}
           </h1>
           <div className="flex justify-center gap-3 pt-1">
@@ -31,7 +31,7 @@ export default function ProfilePage() {
             </Link>
             <button
               onClick={() => loginDemoUser(true)}
-              className="px-5 py-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-[#d4d6dc]"
+              className="px-5 py-3 rounded-xl secondary-3d-btn text-xs font-medium"
             >
               {locale === 'fa' ? 'ورود آزمایشی' : 'Demo Sign In'}
             </button>
@@ -47,20 +47,20 @@ export default function ProfilePage() {
         items={[{ label: locale === 'fa' ? 'حساب کاربری' : 'Account' }]}
       />
 
-      <div className="rounded-2xl bg-[#14161a] p-6 sm:p-8 border border-white/[0.08] flex flex-col sm:flex-row items-center justify-between gap-6">
+      <div className="rounded-3xl glass-panel p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-start">
-          <div className="w-16 h-16 rounded-2xl bg-[#d6b88a] text-[#111215] font-bold text-2xl flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl champagne-btn font-bold text-2xl flex items-center justify-center">
             {user.full_name.slice(0, 1)}
           </div>
           <div className="space-y-1.5">
-            <h1 className="text-xl font-bold text-[#f2f2f0]">{user.full_name}</h1>
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs text-[#8e93a0]">
+            <h1 className="text-xl font-bold text-[#f4f4f6]">{user.full_name}</h1>
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs text-[#979fb2]">
               <span className="inline-flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-[#d6b88a]" />
+                <Mail className="w-3.5 h-3.5 text-[#dfc08e]" />
                 {user.email}
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-[#d6b88a]" />
+                <Phone className="w-3.5 h-3.5 text-[#dfc08e]" />
                 {user.phone}
               </span>
             </div>
@@ -69,7 +69,7 @@ export default function ProfilePage() {
 
         <button
           onClick={logoutUser}
-          className="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-[#d4d6dc] text-xs font-medium flex items-center gap-2"
+          className="px-4 py-2.5 rounded-xl secondary-3d-btn text-xs font-medium flex items-center gap-2"
         >
           <LogOut className="w-4 h-4" />
           <span>{locale === 'fa' ? 'خروج' : 'Sign Out'}</span>
@@ -77,33 +77,33 @@ export default function ProfilePage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="rounded-2xl bg-[#14161a] p-6 border border-white/[0.07]">
-          <div className="text-xs text-[#8e93a0]">
+        <div className="rounded-2xl card-level-2 p-6">
+          <div className="text-xs text-[#979fb2]">
             {locale === 'fa' ? 'سفارش‌های ثبت‌شده' : 'Total Orders'}
           </div>
-          <div className="text-2xl font-bold text-[#f2f2f0] mt-2">
+          <div className="text-2xl font-bold text-[#f4f4f6] mt-2">
             {formatNumber(orders.length, locale)}
           </div>
         </div>
-        <div className="rounded-2xl bg-[#14161a] p-6 border border-white/[0.07]">
-          <div className="text-xs text-[#8e93a0]">
+        <div className="rounded-2xl card-level-2 p-6">
+          <div className="text-xs text-[#979fb2]">
             {locale === 'fa' ? 'علاقه‌مندی‌ها' : 'Saved Items'}
           </div>
-          <div className="text-2xl font-bold text-[#d6b88a] mt-2">
+          <div className="text-2xl font-bold text-[#dfc08e] mt-2">
             {formatNumber(wishlistIds.length, locale)}
           </div>
         </div>
       </div>
 
       {user.is_admin && (
-        <div className="rounded-2xl bg-[#14161a] p-6 border border-white/[0.08] flex flex-wrap items-center justify-between gap-4">
+        <div className="rounded-2xl surface-level-1 p-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Shield className="w-5 h-5 text-[#d6b88a]" />
+            <Shield className="w-5 h-5 text-[#dfc08e]" />
             <div>
-              <h3 className="text-sm font-bold text-[#f2f2f0]">
+              <h3 className="text-sm font-bold text-[#f4f4f6]">
                 {locale === 'fa' ? 'مدیریت فروشگاه' : 'Store Admin'}
               </h3>
-              <p className="text-xs text-[#8e93a0]">
+              <p className="text-xs text-[#979fb2]">
                 {locale === 'fa'
                   ? 'مدیریت محصولات و بررسی سفارش‌ها'
                   : 'Manage products and orders'}

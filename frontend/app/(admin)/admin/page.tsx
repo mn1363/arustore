@@ -1,8 +1,7 @@
 'use client'
 
 import React from 'react'
-import Link from 'next/link'
-import { Boxes, DollarSign, ShoppingBag, TrendingUp, Users } from 'lucide-react'
+import { DollarSign, Package, ShoppingCart, Sparkles, TrendingUp } from 'lucide-react'
 import { useStore } from '@/lib/store/useStore'
 import { formatNumber, formatPrice } from '@/lib/utils'
 
@@ -11,140 +10,131 @@ export default function AdminDashboardPage() {
   const products = useStore((s) => s.products)
   const orders = useStore((s) => s.orders)
 
-  const totalRevenueUsd = orders.reduce((acc, o) => acc + o.total, 0) + 18420
-  const totalRevenueToman = orders.reduce((acc, o) => acc + o.total_toman, 0) + 1142000000
+  const totalRevenueUsd = orders.reduce((acc, o) => acc + o.total, 0)
+  const totalRevenueToman = orders.reduce((acc, o) => acc + o.total_toman, 0)
+  const totalStock = products.reduce((acc, p) => acc + p.stock_quantity, 0)
 
   const kpis = [
     {
-      label: locale === 'fa' ? 'فروش کل استودیو' : 'Total Revenue',
-      value: formatPrice(totalRevenueUsd, locale, totalRevenueToman),
-      delta: '+28.4%',
       icon: DollarSign,
-      accent: 'text-amber-300 bg-amber-500/15 border-amber-400/30',
+      label: locale === 'fa' ? 'درآمد کل فروش' : 'Total Revenue',
+      value: formatPrice(totalRevenueUsd, locale, totalRevenueToman),
+      trend: '+28.4%',
     },
     {
-      label: locale === 'fa' ? 'سفارش‌های فعال و تکمیل‌شده' : 'VIP Orders',
-      value: formatNumber(orders.length + 124, locale),
-      delta: '+14.2%',
-      icon: ShoppingBag,
-      accent: 'text-violet-300 bg-violet-500/15 border-violet-400/30',
+      icon: ShoppingCart,
+      label: locale === 'fa' ? 'سفارش‌های فعال' : 'Active Orders',
+      value: formatNumber(orders.length, locale),
+      trend: '+14.2%',
     },
     {
-      label: locale === 'fa' ? 'مدل‌های سه‌بعدی فعال' : 'Active 3D SKUs',
-      value: formatNumber(products.length, locale),
-      delta: '100% WebGL',
-      icon: Boxes,
-      accent: 'text-amber-300 bg-amber-500/15 border-amber-400/30',
+      icon: Package,
+      label: locale === 'fa' ? 'موجودی کل انبار' : 'Units in Stock',
+      value: formatNumber(totalStock, locale),
+      trend: '100%',
     },
     {
-      label: locale === 'fa' ? 'نرخ تبدیل بازدید سه‌بعدی' : '3D Conversion Rate',
-      value: locale === 'fa' ? '۶.۸٪' : '6.8%',
-      delta: '+2.1x vs 2D',
-      icon: Users,
-      accent: 'text-emerald-300 bg-emerald-500/15 border-emerald-400/30',
+      icon: Sparkles,
+      label: locale === 'fa' ? 'نرخ بازدید صحنه ۳بعدی' : '3D Stage Engagement',
+      value: locale === 'fa' ? '۶۴.۸٪' : '64.8%',
+      trend: '+19.1%',
     },
   ]
 
-  const monthlyBars = [42, 58, 51, 74, 69, 88, 96]
+  const monthlyBars = [42, 58, 51, 74, 69, 88, 95]
+  const monthLabelsFa = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر']
+  const monthLabelsEn = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-black text-white">
-          {locale === 'fa'
-            ? 'مرکز فرماندهی و مدیریت آرو استور'
-            : 'AruStore Spatial Command Center'}
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#f4f4f6]">
+          {locale === 'fa' ? 'داشبورد مدیریتی آرو استور' : 'Executive Overview'}
         </h1>
-        <p className="text-xs sm:text-sm text-slate-400 mt-1">
+        <p className="text-xs sm:text-sm text-[#979fb2] mt-1">
           {locale === 'fa'
-            ? 'پایش لحظه‌ای فروش، تعامل با مدل‌های سه‌بعدی و مدیریت موجودی انبار'
-            : 'Live telemetry across 3D WebGL engagement, orders, and flagship inventory'}
+            ? 'پایش فروش، موجودی ظروف آلومینیوم و تعامل کاربران با صحنه‌های سه‌بعدی'
+            : 'Real-time store performance, inventory, and 3D showcase engagement'}
         </p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {kpis.map((kpi, i) => {
+      {/* Dimensional KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        {kpis.map((kpi, idx) => {
           const Icon = kpi.icon
           return (
             <div
-              key={i}
-              className="glass-panel rounded-3xl p-5 border border-white/10 space-y-3"
+              key={idx}
+              className="rounded-3xl card-level-2 p-5 space-y-3"
             >
               <div className="flex items-center justify-between">
-                <div className={`p-2.5 rounded-xl border ${kpi.accent}`}>
+                <div className="w-10 h-10 rounded-xl bg-[#1b2030] border border-[#dfc08e]/30 flex items-center justify-center text-[#dfc08e]">
                   <Icon className="w-5 h-5" />
                 </div>
-                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  {kpi.delta}
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-bold">
+                  <TrendingUp className="w-3 h-3" />
+                  {kpi.trend}
                 </span>
               </div>
               <div>
-                <div className="text-xs text-slate-400">{kpi.label}</div>
-                <div className="text-lg sm:text-xl font-black text-white mt-1">
-                  {kpi.value}
-                </div>
+                <div className="text-xs text-[#979fb2]">{kpi.label}</div>
+                <div className="text-xl font-bold text-[#f4f4f6] mt-1">{kpi.value}</div>
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* Revenue Chart + Recent Orders */}
+      {/* Cohesive Champagne & Aether Revenue Chart + Recent Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 glass-panel rounded-3xl p-6 border border-white/10 space-y-6">
+        <div className="lg:col-span-7 rounded-3xl surface-level-1 p-6 space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-extrabold text-white">
-              {locale === 'fa'
-                ? 'روند رشد فروش و تعامل سه‌بعدی (۷ هفته اخیر)'
-                : '7-Week Spatial Commerce Growth'}
+            <h2 className="text-base font-bold text-[#f4f4f6]">
+              {locale === 'fa' ? 'روند رشد فروش ماهانه' : 'Monthly Sales Growth'}
             </h2>
-            <span className="text-xs text-amber-300 font-bold">LIVE TELEMETRY</span>
+            <span className="text-xs text-[#dfc08e] font-bold">
+              {locale === 'fa' ? '۷ ماه اخیر' : 'Last 7 Months'}
+            </span>
           </div>
 
-          <div className="h-52 flex items-end justify-between gap-3 pt-6 px-2">
-            {monthlyBars.map((val, idx) => (
-              <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+          <div className="h-52 flex items-end justify-between gap-3 pt-6">
+            {monthlyBars.map((val, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
                 <div
-                  className="w-full rounded-t-xl bg-gradient-to-t from-violet-600/70 via-cyan-500/80 to-cyan-300 shadow-neon-cyan transition-all duration-500"
-                  style={{ height: `${val}%` }}
+                  className="w-full max-w-[42px] rounded-t-xl transition-all hover:brightness-110"
+                  style={{
+                    height: `${val}%`,
+                    background:
+                      'linear-gradient(180deg, #eed2a4 0%, #c9a66f 55%, rgba(126, 166, 224, 0.35) 100%)',
+                    boxShadow: '0 8px 20px -8px rgba(223, 192, 142, 0.35)',
+                  }}
                 />
-                <span className="text-[11px] text-slate-400">
-                  {locale === 'fa' ? `هفته ${formatNumber(idx + 1, 'fa')}` : `W${idx + 1}`}
+                <span className="text-[11px] text-[#979fb2]">
+                  {locale === 'fa' ? monthLabelsFa[i] : monthLabelsEn[i]}
                 </span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="lg:col-span-5 glass-panel rounded-3xl p-6 border border-white/10 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-extrabold text-white">
-              {locale === 'fa' ? 'آخرین سفارش‌های VIP' : 'Recent VIP Orders'}
-            </h2>
-            <Link href="/admin/orders" className="text-xs text-amber-300 hover:underline">
-              {locale === 'fa' ? 'همه سفارش‌ها' : 'Manage All'}
-            </Link>
-          </div>
-
+        <div className="lg:col-span-5 rounded-3xl surface-level-1 p-6 space-y-4">
+          <h2 className="text-base font-bold text-[#f4f4f6]">
+            {locale === 'fa' ? 'آخرین سفارش‌های ثبت‌شده' : 'Latest Orders'}
+          </h2>
           <div className="space-y-3">
-            {orders.slice(0, 4).map((ord) => (
+            {orders.slice(0, 4).map((order) => (
               <div
-                key={ord.id}
-                className="rounded-2xl bg-obsidian-950/75 border border-white/[0.07] p-3.5 flex items-center justify-between gap-2"
+                key={order.id}
+                className="rounded-2xl card-level-2 p-3.5 flex items-center justify-between gap-3"
               >
                 <div>
-                  <div className="text-xs font-mono font-bold text-white">
-                    {ord.orderNumber}
+                  <div className="text-xs font-mono font-bold text-[#f4f4f6]">
+                    {order.orderNumber}
                   </div>
-                  <div className="text-[11px] text-slate-400">{ord.customerName}</div>
+                  <div className="text-[11px] text-[#979fb2]">{order.customerName}</div>
                 </div>
-                <div className="text-end">
-                  <div className="text-xs font-extrabold text-amber-300">
-                    {formatPrice(ord.total, locale, ord.total_toman)}
-                  </div>
-                  <div className="text-[10px] text-emerald-400 uppercase">{ord.status}</div>
+                <div className="text-xs font-bold text-[#dfc08e]">
+                  {formatPrice(order.total, locale, order.total_toman)}
                 </div>
               </div>
             ))}

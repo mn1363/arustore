@@ -5,15 +5,15 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   BarChart3,
-  Boxes,
-  ExternalLink,
-  Globe,
+  Box,
   LayoutDashboard,
   ShoppingCart,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react'
+import AtmosphericBackdrop from '@/components/layout/AtmosphericBackdrop'
 import { AruLogo3D } from '@/components/ui/AruLogo3D'
 import { useStore } from '@/lib/store/useStore'
-import { cn } from '@/lib/utils'
 
 export default function AdminLayout({
   children,
@@ -22,88 +22,89 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname()
   const locale = useStore((s) => s.locale)
-  const toggleLocale = useStore((s) => s.toggleLocale)
 
-  const navItems = [
+  const links = [
     {
       href: '/admin',
-      label: locale === 'fa' ? 'پیشخوان هوشمند' : 'Overview',
+      label: locale === 'fa' ? 'داشبورد مدیریتی' : 'Dashboard',
       icon: LayoutDashboard,
     },
     {
       href: '/admin/products',
-      label: locale === 'fa' ? 'مدیریت محصولات ۳بعدی' : '3D Products',
-      icon: Boxes,
+      label: locale === 'fa' ? 'مدیریت محصولات' : 'Products',
+      icon: Box,
     },
     {
       href: '/admin/orders',
-      label: locale === 'fa' ? 'مدیریت سفارش‌ها' : 'Orders',
+      label: locale === 'fa' ? 'سفارش‌ها' : 'Orders',
       icon: ShoppingCart,
     },
     {
       href: '/admin/analytics',
-      label: locale === 'fa' ? 'آنالیتیکس زنده' : 'Analytics',
+      label: locale === 'fa' ? 'آمار تعامل ۳بعدی' : '3D Analytics',
       icon: BarChart3,
     },
   ]
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 gap-6">
-      {/* Sidebar */}
-      <aside className="lg:w-64 flex-shrink-0 glass-panel rounded-3xl p-5 border border-white/10 h-fit lg:sticky lg:top-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <AruLogo3D className="w-9 h-9" />
-            <div>
-              <div className="text-sm font-black text-white">AruAdmin 3D</div>
-              <div className="text-[10px] text-violet-300">
-                {locale === 'fa' ? 'مرکز کنترل استودیو' : 'Spatial Control'}
+    <div className="relative min-h-screen flex flex-col lg:flex-row">
+      <AtmosphericBackdrop />
+      <aside className="relative z-10 w-full lg:w-72 border-b lg:border-b-0 lg:border-e border-white/[0.08] bg-[#0b0e17]/90 backdrop-blur-xl p-6 flex flex-col justify-between gap-6">
+        <div className="space-y-8">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="p-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+                <AruLogo3D className="w-8 h-8" />
               </div>
-            </div>
-          </Link>
-          <button
-            onClick={toggleLocale}
-            className="p-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-amber-300"
-          >
-            <Globe className="w-3.5 h-3.5" />
-          </button>
+              <div>
+                <div className="font-bold text-base text-[#f4f4f6]">
+                  {locale === 'fa' ? 'مدیریت آرو استور' : 'AruStore Admin'}
+                </div>
+                <div className="text-[11px] text-[#dfc08e]">
+                  {locale === 'fa' ? 'کنترل یکپارچه فروشگاه' : 'Store Control Center'}
+                </div>
+              </div>
+            </Link>
+          </div>
+
+          <nav className="grid grid-cols-2 lg:grid-cols-1 gap-2">
+            {links.map((item) => {
+              const Icon = item.icon
+              const active = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                    active
+                      ? 'champagne-btn font-bold'
+                      : 'text-[#979fb2] hover:bg-white/[0.05] hover:text-white'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span>{item.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
         </div>
 
-        <nav className="space-y-1.5">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const active = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all',
-                  active
-                    ? 'bg-gradient-to-r from-amber-400/20 to-yellow-500/20 text-amber-200 border border-amber-400/35'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                )}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="pt-4 border-t border-white/10">
-          <Link
-            href="/"
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-slate-200"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
-            <span>{locale === 'fa' ? 'مشاهده فروشگاه زنده' : 'Back to Storefront'}</span>
-          </Link>
-        </div>
+        <Link
+          href="/"
+          className="px-4 py-3 rounded-xl secondary-3d-btn text-xs font-bold flex items-center justify-between"
+        >
+          <span>{locale === 'fa' ? 'بازگشت به ویترین فروشگاه' : 'Back to Storefront'}</span>
+          {locale === 'fa' ? (
+            <ArrowLeft className="w-4 h-4 text-[#dfc08e]" />
+          ) : (
+            <ArrowRight className="w-4 h-4 text-[#dfc08e]" />
+          )}
+        </Link>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 min-w-0">{children}</div>
+      <main className="relative z-10 flex-1 p-5 sm:p-8 lg:p-10 overflow-x-hidden">
+        {children}
+      </main>
     </div>
   )
 }

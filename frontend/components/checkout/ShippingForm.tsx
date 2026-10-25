@@ -22,10 +22,15 @@ export default function ShippingForm({
   const locale = useStore((s) => s.locale)
 
   return (
-    <div className="rounded-2xl bg-[#14161a] p-6 border border-white/[0.07] space-y-5">
-      <h3 className="text-base sm:text-lg font-bold text-[#f2f2f0]">
-        {locale === 'fa' ? 'اطلاعات تحویل گیرنده' : 'Shipping Address'}
-      </h3>
+    <div className="rounded-2xl surface-level-1 p-6 space-y-5">
+      <div className="flex items-center gap-2.5">
+        <span className="w-6 h-6 rounded-full bg-[#1b2030] border border-[#dfc08e]/40 text-[#dfc08e] text-xs font-bold flex items-center justify-center">
+          {locale === 'fa' ? '۱' : '1'}
+        </span>
+        <h2 className="text-base sm:text-lg font-bold text-[#f4f4f6]">
+          {locale === 'fa' ? 'اطلاعات تحویل گیرنده' : 'Shipping Address'}
+        </h2>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input

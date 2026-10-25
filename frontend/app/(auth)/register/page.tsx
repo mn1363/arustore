@@ -28,8 +28,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-3xl bg-[#14161a] p-8 sm:p-10 border border-white/[0.08] space-y-6">
-      <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+    <div className="w-full max-w-md rounded-3xl glass-panel p-8 sm:p-10 space-y-6">
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#f4f4f6]">
         {locale === 'fa' ? 'ایجاد حساب کاربری' : 'Create Account'}
       </h1>
 
@@ -68,9 +68,9 @@ export default function RegisterPage() {
         </button>
       </form>
 
-      <div className="text-xs text-[#8e93a0] text-center">
+      <div className="text-xs text-[#979fb2] text-center">
         {locale === 'fa' ? 'قبلاً ثبت‌نام کرده‌اید؟ ' : 'Already have an account? '}
-        <Link href="/login" className="text-[#d6b88a] font-bold hover:underline">
+        <Link href="/login" className="text-[#dfc08e] font-bold hover:underline">
           {locale === 'fa' ? 'ورود' : 'Sign In'}
         </Link>
       </div>

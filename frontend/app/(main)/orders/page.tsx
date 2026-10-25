@@ -31,7 +31,7 @@ export default function OrdersPage() {
         items={[{ label: locale === 'fa' ? 'سفارش‌ها' : 'Orders' }]}
       />
 
-      <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#f4f4f6]">
         {locale === 'fa' ? 'سفارش‌های من' : 'My Orders'}
       </h1>
 
@@ -41,28 +41,28 @@ export default function OrdersPage() {
           return (
             <div
               key={order.id}
-              className="rounded-2xl bg-[#14161a] p-6 border border-white/[0.07] space-y-6"
+              className="rounded-3xl surface-level-1 p-6 space-y-6"
             >
               <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
                 <div className="space-y-1">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-[#f2f2f0]">
+                    <span className="text-sm font-bold text-[#f4f4f6]">
                       {order.orderNumber}
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-medium bg-white/[0.06] text-[#d6b88a]">
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-medium bg-[#1a2030] border border-[#dfc08e]/30 text-[#dfc08e]">
                       {meta.label}
                     </span>
                   </div>
-                  <div className="text-xs text-[#8e93a0]">
+                  <div className="text-xs text-[#979fb2]">
                     {order.createdAt} • {order.shippingAddress}
                   </div>
                 </div>
 
                 <div className="text-end">
-                  <div className="text-xs text-[#8e93a0]">
+                  <div className="text-xs text-[#979fb2]">
                     {locale === 'fa' ? 'مبلغ کل' : 'Total'}
                   </div>
-                  <div className="text-base font-bold text-[#d6b88a]">
+                  <div className="text-base font-bold text-[#dfc08e]">
                     {formatPrice(order.total, locale, order.total_toman)}
                   </div>
                 </div>
@@ -92,11 +92,11 @@ export default function OrdersPage() {
                       key={s}
                       className={`rounded-xl p-3 border flex items-center gap-2 ${
                         active
-                          ? 'bg-white/[0.05] border-[#d6b88a]/40 text-[#f2f2f0]'
-                          : 'border-white/[0.05] text-[#666b78]'
+                          ? 'bg-[#1a2030] border-[#dfc08e]/40 text-[#f4f4f6]'
+                          : 'bg-[#0b0d16]/70 border-white/[0.05] text-[#666e82]'
                       }`}
                     >
-                      <Icon className="w-4 h-4 flex-shrink-0 text-[#d6b88a]" />
+                      <Icon className="w-4 h-4 flex-shrink-0 text-[#dfc08e]" />
                       <span className="font-medium truncate">{label}</span>
                     </div>
                   )
@@ -107,18 +107,18 @@ export default function OrdersPage() {
                 {order.items.map((item, idx) => (
                   <div
                     key={idx}
-                    className="rounded-xl bg-[#0d0e11] border border-white/[0.06] p-3 flex items-center gap-3.5"
+                    className="rounded-xl card-level-2 p-3 flex items-center gap-3.5"
                   >
                     <img
                       src={item.image}
                       alt={item.name}
-                      className="w-16 h-14 object-cover rounded-lg bg-[#14161a]"
+                      className="w-16 h-14 object-cover rounded-lg product-pedestal-stage"
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs sm:text-sm font-bold text-[#f2f2f0] truncate">
+                      <div className="text-xs sm:text-sm font-bold text-[#f4f4f6] truncate">
                         {locale === 'fa' ? item.name_fa : item.name}
                       </div>
-                      <div className="text-[11px] text-[#8e93a0]">
+                      <div className="text-[11px] text-[#979fb2]">
                         {locale === 'fa' ? item.colorName_fa : item.colorName} •{' '}
                         {formatNumber(item.quantity, locale)}×
                       </div>

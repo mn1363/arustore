@@ -42,7 +42,7 @@ export default function QuickView3DModal() {
       className="max-w-4xl"
     >
       <div className="grid grid-cols-1 lg:grid-cols-12">
-        <div className="lg:col-span-7 relative h-[330px] sm:h-[420px] bg-[#101216] border-b lg:border-b-0 lg:border-e border-white/[0.07]">
+        <div className="lg:col-span-7 relative h-[330px] sm:h-[420px] product-pedestal-stage border-b lg:border-b-0 lg:border-e border-white/[0.08]">
           <StudioScene3D
             archetype={product.archetype}
             bodyColor={activeColor.hex}
@@ -56,10 +56,10 @@ export default function QuickView3DModal() {
           <div className="absolute bottom-4 inset-x-4 flex justify-center">
             <button
               onClick={() => setExploded((v) => !v)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-colors ${
+              className={`px-3.5 py-1.5 rounded-full text-xs flex items-center gap-1.5 transition-all ${
                 exploded
-                  ? 'bg-[#d6b88a] border-transparent text-[#111215] font-bold'
-                  : 'glass-pill text-[#d4d6dc]'
+                  ? 'champagne-btn font-bold'
+                  : 'glass-pill text-[#e8ebf2]'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -70,20 +70,20 @@ export default function QuickView3DModal() {
 
         <div className="lg:col-span-5 p-6 sm:p-7 flex flex-col justify-between space-y-5">
           <div className="space-y-4">
-            <h2 className="text-xl sm:text-2xl font-bold text-[#f2f2f0]">
+            <h2 className="text-xl sm:text-2xl font-bold text-[#f4f4f6]">
               {getProductTitle(product, locale)}
             </h2>
 
-            <div className="text-xl font-bold text-[#d6b88a]">
+            <div className="text-xl font-bold text-[#dfc08e]">
               {formatPrice(product.price, locale, product.price_toman)}
             </div>
 
-            <p className="text-xs sm:text-sm text-[#9ca0ab] leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#979fb2] leading-relaxed">
               {getProductDescription(product, locale)}
             </p>
 
             <div className="space-y-2 pt-1">
-              <div className="text-xs text-[#9ca0ab]">
+              <div className="text-xs text-[#979fb2]">
                 {locale === 'fa' ? activeColor.name_fa : activeColor.name}
               </div>
               <div className="flex items-center gap-2.5">
@@ -91,10 +91,11 @@ export default function QuickView3DModal() {
                   <button
                     key={c.id}
                     onClick={() => setColorIdx(idx)}
+                    aria-label={locale === 'fa' ? c.name_fa : c.name}
                     className={`w-6 h-6 rounded-full border transition-all ${
                       colorIdx === idx
-                        ? 'scale-110 border-white'
-                        : 'border-white/20 opacity-70 hover:opacity-100'
+                        ? 'scale-110 border-white shadow-[0_0_8px_rgba(223,192,142,0.5)]'
+                        : 'border-white/25 opacity-70 hover:opacity-100'
                     }`}
                     style={{
                       background: `linear-gradient(135deg, ${c.hex} 45%, ${c.accentHex} 100%)`,
@@ -105,7 +106,7 @@ export default function QuickView3DModal() {
             </div>
           </div>
 
-          <div className="space-y-2.5 pt-4 border-t border-white/[0.07]">
+          <div className="space-y-2.5 pt-4 border-t border-white/[0.08]">
             <button
               onClick={() => {
                 addToCart(product, 1, activeColor)
@@ -120,7 +121,7 @@ export default function QuickView3DModal() {
             <Link
               href={`/product/${product.slug}`}
               onClick={() => setQuickViewProduct(null)}
-              className="w-full py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] text-xs font-medium text-[#d4d6dc] flex items-center justify-center gap-1.5 transition-colors"
+              className="w-full py-2.5 rounded-xl secondary-3d-btn text-xs font-medium flex items-center justify-center gap-1.5"
             >
               <span>
                 {locale === 'fa' ? 'مشاهده صفحه محصول' : 'View Product Page'}

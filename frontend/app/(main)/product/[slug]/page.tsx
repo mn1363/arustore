@@ -62,31 +62,31 @@ export default function ProductDetailPage() {
           ]}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 mt-6">
           <div className="lg:col-span-7">
             <ProductGallery product={product} selectedColor={selectedColor} />
           </div>
 
           <div className="lg:col-span-5">
-            <div className="rounded-2xl bg-[#14161a] border border-white/[0.07] p-6 sm:p-8 space-y-6">
+            <div className="rounded-3xl glass-panel p-6 sm:p-8 space-y-6">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+                <h1 className="text-2xl sm:text-3xl font-bold text-[#f4f4f6]">
                   {getProductTitle(product, locale)}
                 </h1>
-                <div className="text-xl sm:text-2xl font-bold text-[#d6b88a] mt-3">
+                <div className="text-xl sm:text-2xl font-bold text-[#dfc08e] mt-3">
                   {formatPrice(finalUsd, locale, finalToman)}
                 </div>
               </div>
 
-              <p className="text-sm text-[#9ca0ab] leading-relaxed">
+              <p className="text-sm text-[#979fb2] leading-relaxed">
                 {getProductDescription(product, locale)}
               </p>
 
               {/* Color Swatches */}
               <div className="space-y-2.5">
-                <div className="text-xs text-[#9ca0ab]">
+                <div className="text-xs text-[#979fb2]">
                   {dict.common.color}:{' '}
-                  <span className="font-bold text-[#f2f2f0]">
+                  <span className="font-bold text-[#f4f4f6]">
                     {locale === 'fa' ? selectedColor.name_fa : selectedColor.name}
                   </span>
                 </div>
@@ -95,10 +95,10 @@ export default function ProductDetailPage() {
                     <button
                       key={c.id}
                       onClick={() => setColorIdx(idx)}
-                      className={`px-3.5 py-2 rounded-xl border text-xs font-medium flex items-center gap-2 transition-colors ${
+                      className={`px-3.5 py-2 rounded-xl border text-xs font-medium flex items-center gap-2 transition-all ${
                         colorIdx === idx
-                          ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0]'
-                          : 'bg-transparent border-white/10 text-[#9ca0ab] hover:text-white'
+                          ? 'bg-[#1b2030] border-[#dfc08e]/65 text-[#f4f4f6] shadow-[0_6px_16px_-6px_rgba(223,192,142,0.28)]'
+                          : 'bg-[#0b0e17]/80 border-white/[0.08] text-[#979fb2] hover:text-white hover:border-white/20'
                       }`}
                     >
                       <span
@@ -123,15 +123,15 @@ export default function ProductDetailPage() {
                         <button
                           key={ed.id}
                           onClick={() => setEditionId(ed.id)}
-                          className={`px-4 py-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-colors ${
+                          className={`px-4 py-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all ${
                             active
-                              ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0]'
-                              : 'border-white/10 text-[#9ca0ab] hover:border-white/20'
+                              ? 'bg-[#1b2030] border-[#dfc08e]/65 text-[#f4f4f6]'
+                              : 'bg-[#0b0e17]/80 border-white/[0.08] text-[#979fb2] hover:border-white/20'
                           }`}
                         >
                           <span>{locale === 'fa' ? ed.label_fa : ed.label}</span>
                           {ed.priceDelta > 0 && (
-                            <span className="text-[#d6b88a]">
+                            <span className="text-[#dfc08e]">
                               + {formatPrice(ed.priceDelta, locale, ed.priceDeltaToman)}
                             </span>
                           )}
@@ -146,8 +146,8 @@ export default function ProductDetailPage() {
               <div className="space-y-2 pt-1">
                 {(locale === 'fa' ? product.highlights_fa : product.highlights).map(
                   (h, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-[#b4b8c2]">
-                      <Check className="w-3.5 h-3.5 text-[#d6b88a] flex-shrink-0" />
+                    <div key={i} className="flex items-center gap-2 text-xs text-[#b4bccf]">
+                      <Check className="w-3.5 h-3.5 text-[#dfc08e] flex-shrink-0" />
                       <span>{h}</span>
                     </div>
                   )
@@ -156,19 +156,21 @@ export default function ProductDetailPage() {
 
               {/* Actions */}
               <div className="flex items-center gap-2.5 pt-2">
-                <div className="flex items-center gap-2 px-3 py-3 rounded-xl border border-white/10 bg-[#0d0e11]">
+                <div className="flex items-center gap-2 px-3 py-3 rounded-xl border border-white/[0.1] bg-[#0a0c14] shadow-[inset_0_2px_4px_rgba(0,0,0,0.45)]">
                   <button
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    className="p-0.5 text-[#9ca0ab] hover:text-white"
+                    aria-label="Decrease quantity"
+                    className="p-0.5 text-[#979fb2] hover:text-white"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
-                  <span className="w-6 text-center font-bold text-sm">
+                  <span className="w-6 text-center font-bold text-sm text-[#f4f4f6]">
                     {formatNumber(quantity, locale)}
                   </span>
                   <button
                     onClick={() => setQuantity((q) => q + 1)}
-                    className="p-0.5 text-[#9ca0ab] hover:text-white"
+                    aria-label="Increase quantity"
+                    className="p-0.5 text-[#979fb2] hover:text-white"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -178,7 +180,7 @@ export default function ProductDetailPage() {
                   onClick={() =>
                     addToCart(product, quantity, selectedColor, editionId)
                   }
-                  className="flex-1 py-3.5 px-5 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                  className="flex-1 py-3.5 px-5 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2"
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span>{dict.common.addToCart}</span>
@@ -186,23 +188,22 @@ export default function ProductDetailPage() {
 
                 <button
                   onClick={() => toggleWishlist(product.id)}
-                  className={`p-3.5 rounded-xl border transition-colors ${
-                    isWishlisted
-                      ? 'border-[#d6b88a] text-[#d6b88a]'
-                      : 'border-white/10 text-[#9ca0ab] hover:text-white'
+                  aria-label="Wishlist"
+                  className={`p-3.5 rounded-xl secondary-3d-btn ${
+                    isWishlisted ? 'text-[#dfc08e] border-[#dfc08e]/50' : ''
                   }`}
                 >
                   <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-current' : ''}`} />
                 </button>
               </div>
 
-              <div className="pt-4 border-t border-white/[0.06] grid grid-cols-2 gap-3 text-xs text-[#8e93a0]">
+              <div className="pt-4 border-t border-white/[0.07] grid grid-cols-2 gap-3 text-xs text-[#979fb2]">
                 <div className="flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-[#d6b88a] flex-shrink-0" />
+                  <Truck className="w-4 h-4 text-[#dfc08e] flex-shrink-0" />
                   <span>{dict.common.freeShipping}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-[#d6b88a] flex-shrink-0" />
+                  <ShieldCheck className="w-4 h-4 text-[#dfc08e] flex-shrink-0" />
                   <span>
                     {locale === 'fa' ? 'ضمانت ۵ ساله ثبات رنگ' : '5-Year Warranty'}
                   </span>

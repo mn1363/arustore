@@ -55,15 +55,15 @@ export default function CheckoutPage() {
   if (completedOrder) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16">
-        <div className="rounded-3xl bg-[#14161a] p-8 sm:p-12 border border-white/[0.08] text-center space-y-6">
-          <div className="w-16 h-16 rounded-full bg-[#d6b88a]/15 border border-[#d6b88a]/35 text-[#d6b88a] mx-auto flex items-center justify-center">
+        <div className="rounded-3xl surface-level-1 p-8 sm:p-12 text-center space-y-6">
+          <div className="w-16 h-16 rounded-full bg-[#1b2030] border border-[#dfc08e]/45 text-[#dfc08e] mx-auto flex items-center justify-center">
             <CheckCircle2 className="w-8 h-8" />
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#f4f4f6]">
             {locale === 'fa' ? 'سفارش شما ثبت شد' : 'Order Confirmed'}
           </h1>
-          <p className="text-sm text-[#9ca0ab] max-w-md mx-auto leading-relaxed">
+          <p className="text-sm text-[#979fb2] max-w-md mx-auto leading-relaxed">
             {locale === 'fa'
               ? `سفارش به شماره ${completedOrder.orderNumber} برای «${completedOrder.customerName}» ثبت شد و در حال آماده‌سازی برای ارسال است.`
               : `Order ${completedOrder.orderNumber} for ${completedOrder.customerName} is being prepared for dispatch.`}
@@ -79,7 +79,7 @@ export default function CheckoutPage() {
             </Link>
             <Link
               href="/products"
-              className="px-6 py-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-sm font-medium text-[#d4d6dc]"
+              className="px-6 py-3 rounded-xl secondary-3d-btn text-sm font-medium"
             >
               {locale === 'fa' ? 'بازگشت به فروشگاه' : 'Continue Shopping'}
             </Link>
@@ -98,9 +98,16 @@ export default function CheckoutPage() {
         ]}
       />
 
-      <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
-        {locale === 'fa' ? 'تسویه حساب' : 'Checkout'}
-      </h1>
+      <div className="space-y-1">
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#f4f4f6]">
+          {locale === 'fa' ? 'تسویه حساب امن' : 'Secure Checkout'}
+        </h1>
+        <p className="text-xs sm:text-sm text-[#979fb2]">
+          {locale === 'fa'
+            ? 'اطلاعات ارسال و پرداخت خود را در دو گام ساده تکمیل کنید.'
+            : 'Complete your shipping and payment details in two simple steps.'}
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-6">

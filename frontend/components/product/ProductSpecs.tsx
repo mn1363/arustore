@@ -11,7 +11,7 @@ export default function ProductSpecs({ specs }: { specs: ProductSpec[] }) {
 
   return (
     <section className="space-y-5">
-      <h2 className="text-xl sm:text-2xl font-bold text-[#f2f2f0]">
+      <h2 className="text-xl sm:text-2xl font-bold text-[#f4f4f6]">
         {dict.common.specs}
       </h2>
 
@@ -19,12 +19,12 @@ export default function ProductSpecs({ specs }: { specs: ProductSpec[] }) {
         {specs.map((spec, idx) => (
           <div
             key={idx}
-            className="rounded-2xl bg-[#14161a] p-5 border border-white/[0.07]"
+            className="rounded-2xl card-level-2 p-5"
           >
-            <div className="text-xs text-[#8e93a0]">
+            <div className="text-xs text-[#979fb2]">
               {locale === 'fa' ? spec.label_fa : spec.label}
             </div>
-            <div className="text-sm sm:text-base font-bold text-[#f2f2f0] mt-1.5">
+            <div className="text-sm sm:text-base font-bold text-[#f4f4f6] mt-1.5">
               {locale === 'fa' ? spec.value_fa : spec.value}
             </div>
           </div>

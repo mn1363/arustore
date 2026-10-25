@@ -19,19 +19,19 @@ export default function ProductGallery({ product, selectedColor }: ProductGaller
   const locale = useStore((s) => s.locale)
 
   const [mode, setMode] = useState<'3d' | 'render'>('render')
-  const [activeImageIdx, setActiveImageIdx] = useState(0)
+  const [activeImageIdx] = useState(0)
   const [exploded, setExploded] = useState(false)
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="inline-flex p-1 rounded-xl bg-[#14161a] border border-white/[0.07]">
+        <div className="inline-flex p-1 rounded-2xl bg-[#0e111b] border border-white/[0.08]">
           <button
             onClick={() => setMode('render')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`px-4 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
               mode === 'render'
                 ? 'champagne-btn font-bold'
-                : 'text-[#9ca0ab] hover:text-[#f2f2f0]'
+                : 'text-[#979fb2] hover:text-[#f4f4f6]'
             }`}
           >
             <ImageIcon className="w-3.5 h-3.5" />
@@ -39,24 +39,24 @@ export default function ProductGallery({ product, selectedColor }: ProductGaller
           </button>
           <button
             onClick={() => setMode('3d')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`px-4 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
               mode === '3d'
                 ? 'champagne-btn font-bold'
-                : 'text-[#9ca0ab] hover:text-[#f2f2f0]'
+                : 'text-[#979fb2] hover:text-[#f4f4f6]'
             }`}
           >
             <Box className="w-3.5 h-3.5" />
-            <span>{locale === 'fa' ? 'نمای سه‌بعدی' : '3D View'}</span>
+            <span>{locale === 'fa' ? 'صحنه سه‌بعدی' : '3D Stage'}</span>
           </button>
         </div>
 
         {mode === '3d' && (
           <button
             onClick={() => setExploded((v) => !v)}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-1.5 transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
               exploded
-                ? 'bg-[#d6b88a] border-transparent text-[#111215] font-bold'
-                : 'bg-[#14161a] border-white/10 text-[#d4d6dc]'
+                ? 'champagne-btn font-bold'
+                : 'secondary-3d-btn text-[#d4d6dc]'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
@@ -65,7 +65,7 @@ export default function ProductGallery({ product, selectedColor }: ProductGaller
         )}
       </div>
 
-      <div className="relative h-[380px] sm:h-[470px] rounded-2xl bg-[#121317] border border-white/[0.07] overflow-hidden">
+      <div className="relative h-[380px] sm:h-[470px] rounded-3xl hero-sanctuary-stage overflow-hidden">
         {mode === '3d' ? (
           <div className="w-full h-full cursor-grab active:cursor-grabbing">
             <StudioScene3D
@@ -79,11 +79,21 @@ export default function ProductGallery({ product, selectedColor }: ProductGaller
             />
           </div>
         ) : (
-          <img
-            src={product.images[activeImageIdx]?.url || product.images[0]?.url}
-            alt={product.name}
-            className="w-full h-full object-cover"
-          />
+          <div className="relative w-full h-full">
+            <img
+              src={product.images[activeImageIdx]?.url || product.images[0]?.url}
+              alt={product.name}
+              className="w-full h-full object-cover"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-20"
+              style={{
+                background:
+                  'linear-gradient(to top, rgba(8, 9, 15, 0.65) 0%, transparent 100%)',
+              }}
+            />
+          </div>
         )}
       </div>
     </div>

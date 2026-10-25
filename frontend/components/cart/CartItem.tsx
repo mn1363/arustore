@@ -22,10 +22,10 @@ export default function CartItem({
   const unitToman = item.product.price_toman + (ed?.priceDeltaToman || 0)
 
   return (
-    <div className="rounded-2xl bg-[#14161a] p-4 sm:p-5 border border-white/[0.07] flex flex-col sm:flex-row items-center gap-5">
+    <div className="rounded-2xl card-level-2 p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-5">
       <Link
         href={`/product/${item.product.slug}`}
-        className="w-28 h-24 rounded-xl bg-[#0d0e11] overflow-hidden flex-shrink-0"
+        className="w-28 h-24 rounded-xl product-pedestal-stage border border-white/[0.06] overflow-hidden flex-shrink-0"
       >
         <img
           src={item.product.images[0]?.url}
@@ -36,11 +36,11 @@ export default function CartItem({
 
       <div className="flex-1 min-w-0 w-full space-y-1.5 text-center sm:text-start">
         <Link href={`/product/${item.product.slug}`}>
-          <h3 className="text-base font-bold text-[#f2f2f0] hover:text-[#d6b88a]">
+          <h3 className="text-base font-bold text-[#f4f4f6] hover:text-[#dfc08e] transition-colors">
             {getProductTitle(item.product, locale)}
           </h3>
         </Link>
-        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-[#8e93a0]">
+        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-[#979fb2]">
           <span className="inline-flex items-center gap-1.5">
             <span
               className="w-3 h-3 rounded-full border border-white/30"
@@ -59,29 +59,29 @@ export default function CartItem({
       </div>
 
       <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-3">
-        <div className="text-base font-bold text-[#d6b88a]">
+        <div className="text-base font-bold text-[#dfc08e]">
           {formatPrice(unitUsd * item.quantity, locale, unitToman * item.quantity)}
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => onUpdateQty(item.id, item.quantity - 1)}
-            className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
+            className="w-8 h-8 rounded-lg secondary-3d-btn flex items-center justify-center"
           >
             <Minus className="w-3.5 h-3.5" />
           </button>
-          <span className="w-7 text-center text-sm font-bold">
+          <span className="w-7 text-center text-sm font-bold text-[#f4f4f6]">
             {formatNumber(item.quantity, locale)}
           </span>
           <button
             onClick={() => onUpdateQty(item.id, item.quantity + 1)}
-            className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
+            className="w-8 h-8 rounded-lg secondary-3d-btn flex items-center justify-center"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => onRemove(item.id)}
-            className="p-2 rounded-lg text-[#8e93a0] hover:text-white ms-1"
+            className="p-2 rounded-lg text-[#979fb2] hover:text-white ms-1"
             title="Remove"
           >
             <Trash2 className="w-4 h-4" />

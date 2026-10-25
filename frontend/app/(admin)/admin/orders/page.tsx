@@ -12,27 +12,27 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-black text-white">
-        {locale === 'fa' ? 'مدیریت وضعیت سفارش‌ها' : 'VIP Order Fulfillment'}
+      <h1 className="text-2xl font-bold text-[#f4f4f6]">
+        {locale === 'fa' ? 'مدیریت وضعیت سفارش‌ها' : 'Order Fulfillment'}
       </h1>
 
       <div className="space-y-4">
         {orders.map((order) => (
           <div
             key={order.id}
-            className="glass-panel rounded-3xl p-5 border border-white/10 flex flex-wrap items-center justify-between gap-4"
+            className="rounded-3xl card-level-2 p-5 flex flex-wrap items-center justify-between gap-4"
           >
             <div>
-              <div className="font-mono font-bold text-white text-base">
+              <div className="font-mono font-bold text-[#f4f4f6] text-base">
                 {order.orderNumber}
               </div>
-              <div className="text-xs text-slate-400 mt-0.5">
+              <div className="text-xs text-[#979fb2] mt-0.5">
                 {order.customerName} • {order.shippingAddress}
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="text-sm font-black text-amber-300">
+              <div className="text-sm font-bold text-[#dfc08e]">
                 {formatPrice(order.total, locale, order.total_toman)}
               </div>
 
@@ -41,13 +41,13 @@ export default function AdminOrdersPage() {
                 onChange={(e) =>
                   updateOrderStatus(order.id, e.target.value as Order['status'])
                 }
-                className="rounded-xl bg-obsidian-900 border border-white/15 px-3 py-2 text-xs font-bold text-white focus:border-amber-400 focus:outline-none"
+                className="rounded-xl bg-[#0a0c14] border border-white/[0.12] px-3 py-2 text-xs font-bold text-[#f4f4f6] focus:border-[#dfc08e] focus:outline-none"
               >
                 <option value="processing">
                   {locale === 'fa' ? 'در حال آماده‌سازی' : 'Processing'}
                 </option>
                 <option value="shipped">
-                  {locale === 'fa' ? 'ارسال‌شده با پیک VIP' : 'Shipped'}
+                  {locale === 'fa' ? 'ارسال شده' : 'Shipped'}
                 </option>
                 <option value="delivered">
                   {locale === 'fa' ? 'تحویل داده شده' : 'Delivered'}

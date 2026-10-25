@@ -54,23 +54,28 @@ export default function Header() {
   return (
     <header
       className={cn(
-        'sticky top-0 z-40 transition-colors duration-300 border-b',
+        'sticky top-0 z-40 transition-all duration-300 border-b',
         scrolled
-          ? 'bg-[#0d0e11]/92 backdrop-blur-md border-white/[0.08]'
-          : 'bg-[#0d0e11] border-white/[0.05]'
+          ? 'bg-[#0b0d16]/86 backdrop-blur-xl border-white/[0.1] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.85)]'
+          : 'bg-[#08090f]/72 backdrop-blur-md border-white/[0.06]'
       )}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[4.25rem] flex items-center justify-between gap-6">
-        {/* Brand */}
-        <Link href="/" className="flex items-center gap-3 flex-shrink-0">
-          <AruLogo3D className="w-9 h-9" />
-          <span className="text-lg sm:text-xl font-bold text-[#f2f2f0] tracking-tight">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[4.5rem] flex items-center justify-between gap-6">
+        {/* Brand Emblem */}
+        <Link href="/" className="group flex items-center gap-3 flex-shrink-0">
+          <div className="relative p-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] group-hover:border-[#dfc08e]/40 transition-colors">
+            <AruLogo3D className="w-7 h-7 sm:w-8 sm:h-8" />
+          </div>
+          <span className="text-lg sm:text-xl font-bold text-[#f4f4f6] tracking-tight">
             {dict.brandName}
           </span>
         </Link>
 
-        {/* Simple Clean Navigation */}
-        <nav className="hidden md:flex items-center gap-7">
+        {/* Dimensional Glass Capsule Navigation */}
+        <nav
+          aria-label="Primary"
+          className="hidden md:flex items-center gap-1 p-1 rounded-2xl bg-[#0d101a]/90 border border-white/[0.07] shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]"
+        >
           {navLinks.map((link) => {
             const active =
               link.href === '/'
@@ -81,10 +86,10 @@ export default function Header() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  'text-sm transition-colors',
+                  'px-4 py-1.5 rounded-xl text-sm transition-all duration-200',
                   active
-                    ? 'text-[#d6b88a] font-bold'
-                    : 'text-[#9ca0ab] hover:text-[#f2f2f0]'
+                    ? 'bg-gradient-to-b from-[#23293d] to-[#171b29] text-[#dfc08e] font-bold border border-[#dfc08e]/30 shadow-[0_6px_16px_-6px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.12)]'
+                    : 'text-[#979fb2] hover:text-[#f4f4f6] hover:bg-white/[0.04]'
                 )}
               >
                 {link.label}
@@ -93,37 +98,37 @@ export default function Header() {
           })}
         </nav>
 
-        {/* Minimal Actions */}
+        {/* Tactile Actions */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSearchOpen((v) => !v)}
             aria-label="Search"
-            className="p-2 rounded-xl text-[#b4b8c2] hover:text-[#f2f2f0] hover:bg-white/[0.05] transition-colors"
+            className="p-2.5 rounded-xl text-[#b4bccf] hover:text-[#f4f4f6] bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] transition-all"
           >
             <Search className="w-4 h-4" />
           </button>
 
           <button
             onClick={toggleLocale}
-            className="px-2.5 py-1.5 rounded-xl text-xs font-medium text-[#b4b8c2] hover:text-[#f2f2f0] hover:bg-white/[0.05] transition-colors"
+            className="px-3 py-2 rounded-xl text-xs font-semibold text-[#b4bccf] hover:text-[#f4f4f6] bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] transition-all"
           >
             {locale === 'fa' ? 'EN' : 'فا'}
           </button>
 
           <Link
             href="/wishlist"
-            className="relative p-2 rounded-xl text-[#b4b8c2] hover:text-[#f2f2f0] hover:bg-white/[0.05] transition-colors hidden sm:inline-flex"
+            className="relative p-2.5 rounded-xl text-[#b4bccf] hover:text-[#f4f4f6] bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] transition-all hidden sm:inline-flex"
             title={dict.nav.wishlist}
           >
             <Heart className="w-4 h-4" />
             {wishlistIds.length > 0 && (
-              <span className="absolute top-1 end-1 w-2 h-2 rounded-full bg-[#d6b88a]" />
+              <span className="absolute top-1.5 end-1.5 w-2 h-2 rounded-full bg-[#dfc08e] shadow-[0_0_8px_#dfc08e]" />
             )}
           </Link>
 
           <Link
             href={user ? '/profile' : '/login'}
-            className="hidden sm:inline-flex p-2 rounded-xl text-[#b4b8c2] hover:text-[#f2f2f0] hover:bg-white/[0.05] transition-colors"
+            className="hidden sm:inline-flex p-2.5 rounded-xl text-[#b4bccf] hover:text-[#f4f4f6] bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] transition-all"
             title={user ? user.full_name : 'Login'}
           >
             <User className="w-4 h-4" />
@@ -131,7 +136,7 @@ export default function Header() {
 
           <button
             onClick={() => setCartDrawerOpen(true)}
-            className="px-3.5 py-2 rounded-xl champagne-btn font-bold text-xs flex items-center gap-2 transition-colors"
+            className="px-4 py-2 rounded-xl champagne-btn font-bold text-xs flex items-center gap-2"
           >
             <ShoppingBag className="w-4 h-4" />
             <span>{formatNumber(itemCount, locale)}</span>
@@ -140,7 +145,7 @@ export default function Header() {
           <button
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Menu"
-            className="md:hidden p-2 rounded-xl text-[#f2f2f0] hover:bg-white/[0.05]"
+            className="md:hidden p-2 rounded-xl text-[#f4f4f6] bg-white/[0.04] border border-white/[0.08]"
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -148,12 +153,12 @@ export default function Header() {
       </div>
 
       {searchOpen && (
-        <div className="border-t border-white/[0.06] bg-[#14161a]">
+        <div className="border-t border-white/[0.08] bg-[#10131c]/95 backdrop-blur-xl">
           <form
             onSubmit={handleSearchSubmit}
-            className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3"
+            className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center gap-3"
           >
-            <Search className="w-4 h-4 text-[#9ca0ab] flex-shrink-0" />
+            <Search className="w-4 h-4 text-[#dfc08e] flex-shrink-0" />
             <input
               type="text"
               autoFocus
@@ -164,24 +169,35 @@ export default function Header() {
                   ? 'جستجوی نام ظرف (شیرینی‌خوری، میوه‌خوری، سینی...)'
                   : 'Search products...'
               }
-              className="w-full bg-transparent text-sm text-[#f2f2f0] placeholder:text-[#6e7380] focus:outline-none"
+              className="w-full bg-transparent text-sm text-[#f4f4f6] placeholder:text-[#6e768a] focus:outline-none"
             />
           </form>
         </div>
       )}
 
       {mobileOpen && (
-        <div className="md:hidden border-t border-white/[0.06] bg-[#14161a] px-4 py-3 space-y-1">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setMobileOpen(false)}
-              className="block py-2.5 px-3 rounded-lg text-sm text-[#d4d6dc] hover:bg-white/[0.04]"
-            >
-              {link.label}
-            </Link>
-          ))}
+        <div className="md:hidden border-t border-white/[0.08] bg-[#10131c]/96 backdrop-blur-xl px-4 py-3 space-y-1.5">
+          {navLinks.map((link) => {
+            const active =
+              link.href === '/'
+                ? pathname === '/'
+                : pathname?.startsWith(link.href)
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  'block py-2.5 px-3.5 rounded-xl text-sm transition-colors',
+                  active
+                    ? 'bg-[#1a1f2e] text-[#dfc08e] font-bold border border-[#dfc08e]/25'
+                    : 'text-[#d4d6dc] hover:bg-white/[0.04]'
+                )}
+              >
+                {link.label}
+              </Link>
+            )
+          })}
         </div>
       )}
     </header>

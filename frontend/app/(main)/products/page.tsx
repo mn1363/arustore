@@ -75,25 +75,25 @@ function ProductsCatalogContent() {
       />
 
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl sm:text-4xl font-bold text-[#f2f2f0]">
+        <h1 className="text-2xl sm:text-4xl font-bold text-[#f4f4f6]">
           {locale === 'fa' ? 'محصولات' : 'Products'}
         </h1>
-        <span className="text-xs sm:text-sm text-[#8e93a0]">
+        <span className="px-3 py-1 rounded-full glass-pill text-xs sm:text-sm text-[#b4bccf]">
           {formatNumber(total, locale)} {locale === 'fa' ? 'محصول' : 'items'}
         </span>
       </div>
 
-      {/* Clean Category Filter Tabs */}
-      <div className="flex items-center gap-6 overflow-x-auto border-b border-white/[0.07]">
+      {/* Dimensional Category Capsule Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <button
           onClick={() => {
             setCategorySlug('all')
             setPage(1)
           }}
-          className={`pb-3 text-xs sm:text-sm whitespace-nowrap border-b-2 transition-colors ${
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm whitespace-nowrap transition-all ${
             categorySlug === 'all'
-              ? 'text-[#f2f2f0] font-bold border-[#d6b88a]'
-              : 'text-[#8e93a0] border-transparent hover:text-[#d4d6dc]'
+              ? 'champagne-btn font-bold'
+              : 'secondary-3d-btn text-[#b4bccf]'
           }`}
         >
           {locale === 'fa' ? 'همه' : 'All'}
@@ -107,10 +107,10 @@ function ProductsCatalogContent() {
                 setCategorySlug(cat.slug)
                 setPage(1)
               }}
-              className={`pb-3 text-xs sm:text-sm whitespace-nowrap border-b-2 transition-colors ${
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm whitespace-nowrap transition-all ${
                 active
-                  ? 'text-[#f2f2f0] font-bold border-[#d6b88a]'
-                  : 'text-[#8e93a0] border-transparent hover:text-[#d4d6dc]'
+                  ? 'champagne-btn font-bold'
+                  : 'secondary-3d-btn text-[#b4bccf]'
               }`}
             >
               {locale === 'fa' ? cat.name_fa : cat.name}
@@ -153,7 +153,7 @@ function ProductsCatalogContent() {
         </div>
 
         <div className="lg:col-span-9 space-y-6">
-          <div className="rounded-2xl bg-[#14161a] border border-white/[0.07] p-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-2xl surface-level-1 p-3 flex flex-wrap items-center justify-between gap-3">
             <SearchBar
               value={search}
               onChange={(val) => {
@@ -166,7 +166,7 @@ function ProductsCatalogContent() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                className="rounded-xl bg-[#0d0e11] border border-white/10 px-3.5 py-2 text-xs text-[#e4e6eb] focus:outline-none"
+                className="rounded-xl bg-[#0a0c14] border border-white/[0.1] px-3.5 py-2 text-xs text-[#e8ebf2] focus:outline-none focus:border-[#dfc08e]/50"
               >
                 <option value="featured">
                   {locale === 'fa' ? 'پیشنهادی' : 'Featured'}
@@ -182,19 +182,25 @@ function ProductsCatalogContent() {
                 </option>
               </select>
 
-              <div className="hidden sm:flex items-center p-1 rounded-xl bg-[#0d0e11] border border-white/10">
+              <div className="hidden sm:flex items-center p-1 rounded-xl bg-[#0a0c14] border border-white/[0.1]">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg ${
-                    viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-[#7d828f]'
+                  aria-label="Grid view"
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-[#1b2030] text-[#dfc08e]'
+                      : 'text-[#7d8597] hover:text-white'
                   }`}
                 >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded-lg ${
-                    viewMode === 'list' ? 'bg-white/10 text-white' : 'text-[#7d828f]'
+                  aria-label="List view"
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-[#1b2030] text-[#dfc08e]'
+                      : 'text-[#7d8597] hover:text-white'
                   }`}
                 >
                   <List className="w-4 h-4" />
@@ -204,8 +210,8 @@ function ProductsCatalogContent() {
           </div>
 
           {paginated.length === 0 ? (
-            <div className="rounded-2xl bg-[#14161a] border border-white/[0.07] p-12 text-center space-y-4">
-              <p className="text-base font-bold text-[#f2f2f0]">
+            <div className="rounded-2xl surface-level-1 p-12 text-center space-y-4">
+              <p className="text-base font-bold text-[#f4f4f6]">
                 {locale === 'fa' ? 'محصولی یافت نشد' : 'No products found'}
               </p>
               <button

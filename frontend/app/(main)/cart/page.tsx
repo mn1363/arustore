@@ -20,13 +20,13 @@ export default function CartPage() {
       <Breadcrumb items={[{ label: dict.common.cart }]} />
 
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-[#f2f2f0]">
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#f4f4f6]">
           {dict.common.cart}
         </h1>
         {cart.length > 0 && (
           <button
             onClick={clearCart}
-            className="text-xs font-medium text-[#9ca0ab] hover:text-white"
+            className="px-3.5 py-1.5 rounded-xl secondary-3d-btn text-xs font-medium"
           >
             {locale === 'fa' ? 'خالی کردن سبد خرید' : 'Clear Bag'}
           </button>
@@ -34,9 +34,9 @@ export default function CartPage() {
       </div>
 
       {cart.length === 0 ? (
-        <div className="rounded-2xl bg-[#14161a] p-14 text-center space-y-5 border border-white/[0.07]">
-          <ShoppingBag className="w-10 h-10 text-[#666b78] mx-auto" />
-          <h2 className="text-lg font-bold text-[#f2f2f0]">{dict.common.emptyCart}</h2>
+        <div className="rounded-3xl surface-level-1 p-14 text-center space-y-5">
+          <ShoppingBag className="w-10 h-10 text-[#666e82] mx-auto" />
+          <h2 className="text-lg font-bold text-[#f4f4f6]">{dict.common.emptyCart}</h2>
           <Link
             href="/products"
             className="inline-flex px-6 py-3 rounded-xl champagne-btn font-bold text-sm"

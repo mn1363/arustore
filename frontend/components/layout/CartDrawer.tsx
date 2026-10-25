@@ -25,20 +25,21 @@ export default function CartDrawer() {
   if (!isCartDrawerOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+        className="fixed inset-0 bg-[#05060b]/75 backdrop-blur-md"
         onClick={() => setCartDrawerOpen(false)}
       />
 
-      <aside className="relative z-10 w-full max-w-md h-full bg-[#14161a] border-s border-white/[0.08] flex flex-col justify-between">
-        <div className="px-6 py-5 border-b border-white/[0.07] flex items-center justify-between">
-          <h2 className="text-base font-bold text-[#f2f2f0]">
+      <aside className="relative z-10 w-full max-w-md h-full bg-gradient-to-b from-[#131724] to-[#0c0e17] border-s border-white/[0.1] shadow-depth-hero flex flex-col justify-between">
+        <div className="px-6 py-5 border-b border-white/[0.08] flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#f4f4f6]">
             {dict.common.cart} ({formatNumber(itemCount, locale)})
           </h2>
           <button
             onClick={() => setCartDrawerOpen(false)}
-            className="p-2 rounded-lg hover:bg-white/[0.06] text-[#9ca0ab] hover:text-white"
+            aria-label="Close cart"
+            className="p-2 rounded-xl hover:bg-white/[0.06] text-[#979fb2] hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -47,8 +48,8 @@ export default function CartDrawer() {
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-4">
-              <ShoppingBag className="w-8 h-8 text-[#5c606d]" />
-              <p className="text-sm text-[#9ca0ab]">{dict.common.emptyCart}</p>
+              <ShoppingBag className="w-9 h-9 text-[#5c6375]" />
+              <p className="text-sm text-[#979fb2]">{dict.common.emptyCart}</p>
               <Link
                 href="/products"
                 onClick={() => setCartDrawerOpen(false)}
@@ -61,9 +62,9 @@ export default function CartDrawer() {
             cart.map((item) => (
               <div
                 key={item.id}
-                className="rounded-xl bg-[#101216] border border-white/[0.06] p-3 flex items-center gap-3.5"
+                className="rounded-2xl card-level-2 p-3 flex items-center gap-3.5"
               >
-                <div className="w-20 h-16 rounded-lg overflow-hidden bg-[#0d0e11] flex-shrink-0">
+                <div className="w-20 h-16 rounded-xl overflow-hidden product-pedestal-stage border border-white/[0.06] flex-shrink-0">
                   <img
                     src={item.product.images[0]?.url}
                     alt={item.product.name}
@@ -75,18 +76,18 @@ export default function CartDrawer() {
                   <Link
                     href={`/product/${item.product.slug}`}
                     onClick={() => setCartDrawerOpen(false)}
-                    className="text-sm font-bold text-[#f2f2f0] hover:text-[#d6b88a] line-clamp-1"
+                    className="text-sm font-bold text-[#f4f4f6] hover:text-[#dfc08e] line-clamp-1"
                   >
                     {getProductTitle(item.product, locale)}
                   </Link>
-                  <div className="text-[11px] text-[#8e93a0] mt-0.5 truncate">
+                  <div className="text-[11px] text-[#979fb2] mt-0.5 truncate">
                     {locale === 'fa'
                       ? item.selectedColor.name_fa
                       : item.selectedColor.name}
                   </div>
 
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="text-xs font-bold text-[#d6b88a]">
+                    <div className="text-xs font-bold text-[#dfc08e]">
                       {formatPrice(
                         item.product.price * item.quantity,
                         locale,
@@ -97,22 +98,22 @@ export default function CartDrawer() {
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
-                        className="w-6 h-6 rounded-md bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
+                        className="w-6 h-6 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="text-xs font-bold w-5 text-center">
+                      <span className="text-xs font-bold w-5 text-center text-[#f4f4f6]">
                         {formatNumber(item.quantity, locale)}
                       </span>
                       <button
                         onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
-                        className="w-6 h-6 rounded-md bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
+                        className="w-6 h-6 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => removeFromCart(item.id)}
-                        className="p-1 text-[#7d828f] hover:text-white ms-1"
+                        className="p-1 text-[#7d8597] hover:text-white ms-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -125,10 +126,10 @@ export default function CartDrawer() {
         </div>
 
         {cart.length > 0 && (
-          <div className="p-5 border-t border-white/[0.07] bg-[#101216] space-y-3.5">
+          <div className="p-5 border-t border-white/[0.08] bg-[#0a0c14]/90 space-y-3.5">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-[#9ca0ab]">{dict.common.subtotal}</span>
-              <span className="text-base font-bold text-[#f2f2f0]">
+              <span className="text-[#979fb2]">{dict.common.subtotal}</span>
+              <span className="text-base font-bold text-[#dfc08e]">
                 {formatPrice(subtotalUsd, locale, subtotalToman)}
               </span>
             </div>
@@ -137,7 +138,7 @@ export default function CartDrawer() {
               <Link
                 href="/cart"
                 onClick={() => setCartDrawerOpen(false)}
-                className="py-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-center text-xs font-bold text-[#e4e6eb]"
+                className="py-3 rounded-xl secondary-3d-btn text-center text-xs font-bold"
               >
                 {locale === 'fa' ? 'سبد خرید' : 'View Bag'}
               </Link>
