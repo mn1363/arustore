@@ -1,11 +1,12 @@
 import {
   CartItemType,
   CreateOrderPayload,
+  Locale,
   ServerOrder,
   ServerOrderItem,
   ServerOrderStatusHistoryEntry,
 } from '@/types'
-import { aruApi } from '@/lib/api/client'
+import { ApiError, aruApi } from '@/lib/api/client'
 import { buildCartLineIdentityKey } from '@/lib/api/cart'
 
 export interface BackendOrderItemDto {
@@ -180,6 +181,14 @@ export async function createServerOrder(
   payload: CreateOrderPayload,
   idempotencyKey: string
 ): Promise<ServerOrder> {
+  const cleanedKey = (idempotencyKey || '').trim()
+  if (!cleanedKey || cleanedKey.length > 128) {
+    throw new ApiError(
+      'Idempotency-Key must be between 1 and 128 non-whitespace characters',
+      400
+    )
+  }
+
   // Strip any accidental extra properties so only authoritative checkout metadata + promo_code are sent
   const cleanBody: CreateOrderPayload = {
     customer_name: payload.customer_name.trim(),
@@ -190,11 +199,52 @@ export async function createServerOrder(
     promo_code: payload.promo_code?.trim() || null,
   }
 
-  const dto = await aruApi.orders.create<BackendOrderDto>(
-    cleanBody,
-    idempotencyKey.trim()
-  )
+  const dto = await aruApi.orders.create<BackendOrderDto>(cleanBody, cleanedKey)
   return mapOrderDtoToServerOrder(dto)
+}
+
+export interface AdminOrderStatusOption {
+  value: string
+  label: string
+}
+
+export function getAllowedAdminOrderStatusOptions(
+  order: Pick<ServerOrder, 'status' | 'paymentStatus'>,
+  locale: Locale
+): AdminOrderStatusOption[] {
+  const labels: Record<string, string> = {
+    pending_payment:
+      locale === 'fa' ? 'در انتظار پرداخت' : 'Pending Payment',
+    processing: locale === 'fa' ? 'در حال پردازش' : 'Processing',
+    shipped: locale === 'fa' ? 'ارسال شده' : 'Shipped',
+    delivered: locale === 'fa' ? 'تحویل شده' : 'Delivered',
+    cancelled: locale === 'fa' ? 'لغو شده' : 'Cancelled',
+  }
+
+  const makeOptions = (values: string[]): AdminOrderStatusOption[] =>
+    values.map((value) => ({
+      value,
+      label: labels[value] || value,
+    }))
+
+  // Terminal cancelled orders cannot reopen
+  if (order.status === 'cancelled') {
+    return makeOptions(['cancelled'])
+  }
+
+  // Unpaid orders may ONLY remain `pending_payment` or be `cancelled`
+  if (order.paymentStatus !== 'paid') {
+    return makeOptions(['pending_payment', 'cancelled'])
+  }
+
+  // Paid orders cannot revert to `pending_payment`
+  if (order.status === 'delivered') {
+    return makeOptions(['delivered'])
+  }
+  if (order.status === 'shipped') {
+    return makeOptions(['shipped', 'delivered', 'cancelled'])
+  }
+  return makeOptions(['processing', 'shipped', 'delivered', 'cancelled'])
 }
 
 export async function fetchServerOrders(): Promise<ServerOrder[]> {

@@ -52,6 +52,15 @@ def _compute_cart_hash(cart_rows: Sequence[CartItem]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+PAID_ALLOWED_NEXT_STATUSES: Dict[str, set[str]] = {
+    "processing": {"processing", "shipped", "delivered", "cancelled"},
+    "shipped": {"shipped", "delivered", "cancelled"},
+    "delivered": {"delivered"},
+    "cancelled": {"cancelled"},
+    "pending_payment": {"processing", "shipped", "delivered", "cancelled"},
+}
+
+
 class OrderService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -120,16 +129,19 @@ class OrderService:
         self,
         user: User,
         payload: OrderCreate,
-        idempotency_key: Optional[str] = None,
+        idempotency_key: str,
     ) -> OrderResponse:
-        cleaned_key: Optional[str] = None
-        if idempotency_key is not None:
-            cleaned_key = idempotency_key.strip()
-            if not cleaned_key or len(cleaned_key) > 128:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Idempotency-Key must be between 1 and 128 non-whitespace characters",
-                )
+        if idempotency_key is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Idempotency-Key header is required",
+            )
+        cleaned_key = idempotency_key.strip()
+        if not cleaned_key or len(cleaned_key) > 128:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Idempotency-Key must be between 1 and 128 non-whitespace characters",
+            )
 
         user_id = int(user.id)
         user_phone = user.phone
@@ -139,12 +151,11 @@ class OrderService:
         max_attempts = 6
         for attempt in range(max_attempts):
             try:
-                if cleaned_key:
-                    existing = await self._resolve_existing_idempotent_order(
-                        user_id, cleaned_key, payload_hash
-                    )
-                    if existing is not None:
-                        return existing
+                existing = await self._resolve_existing_idempotent_order(
+                    user_id, cleaned_key, payload_hash
+                )
+                if existing is not None:
+                    return existing
 
                 cart_rows = await self._load_user_cart_rows(user_id)
                 if not cart_rows:
@@ -306,17 +317,16 @@ class OrderService:
                 self.db.add(order)
                 await self.db.flush()
 
-                if cleaned_key:
-                    self.db.add(
-                        OrderIdempotencyRecord(
-                            user_id=user_id,
-                            idempotency_key=cleaned_key,
-                            payload_hash=payload_hash,
-                            cart_hash=cart_hash,
-                            order_id=order.id,
-                        )
+                self.db.add(
+                    OrderIdempotencyRecord(
+                        user_id=user_id,
+                        idempotency_key=cleaned_key,
+                        payload_hash=payload_hash,
+                        cart_hash=cart_hash,
+                        order_id=order.id,
                     )
-                    await self.db.flush()
+                )
+                await self.db.flush()
 
                 # Clear cart inside the SAME database transaction (never calling a helper that commits separately)
                 await self.db.execute(
@@ -333,14 +343,13 @@ class OrderService:
 
             except IntegrityError:
                 await self.db.rollback()
-                if cleaned_key:
-                    for _ in range(4):
-                        existing = await self._resolve_existing_idempotent_order(
-                            user_id, cleaned_key, payload_hash
-                        )
-                        if existing is not None:
-                            return existing
-                        await asyncio.sleep(0.02)
+                for _ in range(4):
+                    existing = await self._resolve_existing_idempotent_order(
+                        user_id, cleaned_key, payload_hash
+                    )
+                    if existing is not None:
+                        return existing
+                    await asyncio.sleep(0.02)
                 if attempt < max_attempts - 1:
                     await asyncio.sleep(0.02 * (attempt + 1))
                     continue
@@ -400,11 +409,53 @@ class OrderService:
         ).scalar_one_or_none()
         if not loaded:
             raise HTTPException(status_code=404, detail="Order not found")
-        loaded.status = payload.status
+
+        current_status = loaded.status
+        payment_status = loaded.payment_status
+        target_status = payload.status
+
+        if payment_status != "paid":
+            if target_status not in {"pending_payment", "cancelled"}:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Cannot transition order status from '{current_status}' to '{target_status}' "
+                        f"while payment_status is '{payment_status}'. Unpaid orders may only be 'pending_payment' or 'cancelled'."
+                    ),
+                )
+            if current_status == "cancelled" and target_status != "cancelled":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cancelled orders cannot transition back to 'pending_payment'.",
+                )
+        else:
+            if target_status == "pending_payment":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Paid orders cannot transition back to 'pending_payment'.",
+                )
+            allowed_targets = PAID_ALLOWED_NEXT_STATUSES.get(
+                current_status,
+                {"processing", "shipped", "delivered", "cancelled"},
+            )
+            if target_status not in allowed_targets:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Cannot transition paid order from '{current_status}' to '{target_status}'."
+                    ),
+                )
+
+        cleaned_note = (payload.note or "").strip()
+        if target_status == current_status and not cleaned_note:
+            return OrderResponse.model_validate(loaded)
+
+        loaded.status = target_status
         loaded.status_history.append(
             OrderStatusHistory(
-                status=payload.status,
-                note=payload.note or f"Status updated to {payload.status}",
+                status=target_status,
+                note=cleaned_note
+                or f"Status updated from {current_status} to {target_status}",
             )
         )
         await self.db.commit()

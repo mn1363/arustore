@@ -152,7 +152,7 @@ async def test_cart_promo_order_verified_review_and_wishlist_flow(
     # Checkout order from cart
     order_res = await client.post(
         "/api/v1/orders/",
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "e2e-order-aru3d-1"},
         json={
             "customer_name": "آرین رادمهر",
             "customer_phone": "09123456789",

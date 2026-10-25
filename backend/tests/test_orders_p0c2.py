@@ -11,7 +11,12 @@ from app.core.database import get_db
 from app.main import app
 from app.models.cart import CartItem
 from app.models.discount import Discount, DiscountUsage
-from app.models.order import Order, OrderIdempotencyRecord, OrderItem
+from app.models.order import (
+    Order,
+    OrderIdempotencyRecord,
+    OrderItem,
+    OrderStatusHistory,
+)
 from app.models.product import Product
 from app.models.user import User
 
@@ -116,7 +121,6 @@ async def test_4_invalid_variants_inactive_product_and_stock_revalidation(
         ).scalar_one()
         row.selected_edition = "fake-edition"
         await session.commit()
-        break
 
     bad_ed = await client.post(
         "/api/v1/orders/",
@@ -136,7 +140,6 @@ async def test_4_invalid_variants_inactive_product_and_stock_revalidation(
         row.selected_edition = "standard"
         row.selected_color = {"id": "invalid-finish", "name": "Fake", "hex": "#000000"}
         await session.commit()
-        break
 
     bad_col = await client.post(
         "/api/v1/orders/",
@@ -159,7 +162,6 @@ async def test_4_invalid_variants_inactive_product_and_stock_revalidation(
         row.selected_color = prod2.colors[0]
         prod2.stock_quantity = 1
         await session.commit()
-        break
 
     low_stock = await client.post(
         "/api/v1/orders/",
@@ -177,7 +179,6 @@ async def test_4_invalid_variants_inactive_product_and_stock_revalidation(
         prod2.stock_quantity = 10
         prod2.is_active = False
         await session.commit()
-        break
 
     inactive_res = await client.post(
         "/api/v1/orders/",
@@ -251,7 +252,6 @@ async def test_5_6_7_8_authoritative_totals_promo_caps_pending_states_and_zero_p
         ).scalar_one()
         initial_points = user_obj.loyalty_points or 0
         await session.commit()
-        break
 
     # Add 1 x Product #3 ($80 / 4,400,000 Toman) -> below VIP20 min ($100)
     await client.post(
@@ -348,7 +348,6 @@ async def test_5_6_7_8_authoritative_totals_promo_caps_pending_states_and_zero_p
             await session.execute(select(User).where(User.id == user_id))
         ).scalar_one()
         assert (user_after.loyalty_points or 0) == initial_points
-        break
 
     # Historical paid order remains untouched & preserves paid/processing status
     list_res = await client.get("/api/v1/orders", headers=headers)
@@ -376,7 +375,6 @@ async def test_10_failure_mid_transaction_rolls_back_order_and_preserves_cart(
     # Inject an exception on session.commit inside OrderService.create_order AFTER Order & OrderItems flushed
     async for session in override_get_db():
         SessionCls = type(session)
-        break
 
     with patch.object(
         SessionCls, "commit", side_effect=RuntimeError("Simulated DB commit crash")
@@ -408,7 +406,6 @@ async def test_10_failure_mid_transaction_rolls_back_order_and_preserves_cart(
         assert order_cnt == 0
         assert item_cnt == 0
         assert idem_cnt == 0
-        break
 
     cart_check = await client.get("/api/v1/cart/", headers=headers)
     assert cart_check.json()["item_count"] == 2
@@ -516,7 +513,6 @@ async def test_11_12_13_14_idempotency_replay_conflict_concurrency_and_user_isol
         with pytest.raises(IntegrityError):
             await session.flush()
         await session.rollback()
-        break
 
     # 14. User B cannot read User A's order, and User A cannot read User B's order
     assert (
@@ -527,3 +523,296 @@ async def test_11_12_13_14_idempotency_replay_conflict_concurrency_and_user_isol
     ).status_code == 403
     user_b_orders = (await client.get("/api/v1/orders/", headers=headers_b)).json()
     assert [o["id"] for o in user_b_orders] == [order_b["id"]]
+
+
+@pytest.mark.asyncio
+async def test_15_required_idempotency_key_missing_blank_slash_variants_and_concurrency(
+    client: AsyncClient,
+):
+    headers, user_id = await register_user_headers(
+        client, "mandatory-idem@arustore.ir", "Mandatory Idem User"
+    )
+    override_get_db = app.dependency_overrides[get_db]
+
+    await client.post(
+        "/api/v1/cart/items",
+        headers=headers,
+        json={"product_id": 1, "quantity": 2},
+    )
+
+    # Missing Idempotency-Key header rejected on BOTH `/api/v1/orders` and `/api/v1/orders/`
+    for endpoint in ("/api/v1/orders", "/api/v1/orders/"):
+        missing_res = await client.post(
+            endpoint,
+            headers=headers,
+            json=VALID_SHIPPING,
+        )
+        assert missing_res.status_code == 400, missing_res.text
+        assert "idempotency-key" in missing_res.json()["detail"].lower()
+
+    # Blank, whitespace-only, and >128-character Idempotency-Key rejected on BOTH slash variants
+    for bad_key in ("", "     ", "\t  ", "k" * 129):
+        for endpoint in ("/api/v1/orders", "/api/v1/orders/"):
+            bad_res = await client.post(
+                endpoint,
+                headers={**headers, "Idempotency-Key": bad_key},
+                json=VALID_SHIPPING,
+            )
+            assert bad_res.status_code == 400, (endpoint, bad_key, bad_res.text)
+
+    # Cart remains intact and zero orders created after all rejected header attempts
+    assert (await client.get("/api/v1/cart/", headers=headers)).json()["item_count"] == 2
+    assert (await client.get("/api/v1/orders", headers=headers)).json() == []
+
+    # Concurrent duplicate submissions across BOTH `/api/v1/orders` and `/api/v1/orders/` with 128-char max key
+    max_len_key = "m" * 128
+    c1, c2, c3, c4 = await asyncio.gather(
+        client.post(
+            "/api/v1/orders",
+            headers={**headers, "Idempotency-Key": max_len_key},
+            json=VALID_SHIPPING,
+        ),
+        client.post(
+            "/api/v1/orders/",
+            headers={**headers, "Idempotency-Key": max_len_key},
+            json=VALID_SHIPPING,
+        ),
+        client.post(
+            "/api/v1/orders",
+            headers={**headers, "Idempotency-Key": f"  {max_len_key}  "},
+            json=VALID_SHIPPING,
+        ),
+        client.post(
+            "/api/v1/orders/",
+            headers={**headers, "Idempotency-Key": max_len_key},
+            json=VALID_SHIPPING,
+        ),
+    )
+    for resp in (c1, c2, c3, c4):
+        assert resp.status_code == 201, resp.text
+
+    created = c1.json()
+    assert c2.json()["id"] == created["id"]
+    assert c3.json()["id"] == created["id"]
+    assert c4.json()["id"] == created["id"]
+
+    # Subsequent replay on the opposite slash variant returns the exact same order
+    replay_no_slash = await client.post(
+        "/api/v1/orders",
+        headers={**headers, "Idempotency-Key": max_len_key},
+        json=VALID_SHIPPING,
+    )
+    assert replay_no_slash.status_code == 201
+    assert replay_no_slash.json()["id"] == created["id"]
+
+    # Conflict on both slash variants when checkout details differ
+    for endpoint in ("/api/v1/orders", "/api/v1/orders/"):
+        conflict = await client.post(
+            endpoint,
+            headers={**headers, "Idempotency-Key": max_len_key},
+            json={**VALID_SHIPPING, "customer_name": "نام متفاوت"},
+        )
+        assert conflict.status_code == 409
+
+    # Verify exactly 1 Order and 1 OrderIdempotencyRecord exist for this user
+    async for session in override_get_db():
+        ord_cnt = (
+            await session.execute(
+                select(func.count(Order.id)).where(Order.user_id == user_id)
+            )
+        ).scalar_one()
+        idem_cnt = (
+            await session.execute(
+                select(func.count(OrderIdempotencyRecord.id)).where(
+                    OrderIdempotencyRecord.user_id == user_id
+                )
+            )
+        ).scalar_one()
+        assert ord_cnt == 1
+        assert idem_cnt == 1
+
+
+@pytest.mark.asyncio
+async def test_16_payment_aware_admin_status_transitions_history_and_rbac(
+    client: AsyncClient,
+):
+    customer_headers, customer_id = await register_user_headers(
+        client, "status-policy-buyer@arustore.ir", "Policy Buyer"
+    )
+    admin_login = await client.post(
+        "/api/v1/auth/login/json",
+        json={"email_or_username": "admin@arustore.ir", "password": "Admin1234!"},
+    )
+    assert admin_login.status_code == 200
+    admin_headers = {
+        "Authorization": f"Bearer {admin_login.json()['access_token']}"
+    }
+    override_get_db = app.dependency_overrides[get_db]
+
+    # Create a real pending_payment order via POST /api/v1/orders
+    await client.post(
+        "/api/v1/cart/items",
+        headers=customer_headers,
+        json={"product_id": 2, "quantity": 1},
+    )
+    pending_create = await client.post(
+        "/api/v1/orders",
+        headers={**customer_headers, "Idempotency-Key": "policy-pending-1"},
+        json=VALID_SHIPPING,
+    )
+    assert pending_create.status_code == 201
+    pending_order = pending_create.json()
+    pending_id = pending_order["id"]
+    assert pending_order["status"] == "pending_payment"
+    assert pending_order["payment_status"] == "pending"
+    assert len(pending_order["status_history"]) == 1
+
+    # 7. RBAC: unauthenticated (401) and non-admin customer (403) cannot perform status updates
+    unauth_patch = await client.patch(
+        f"/api/v1/admin/orders/{pending_id}/status",
+        json={"status": "cancelled"},
+    )
+    assert unauth_patch.status_code == 401
+
+    forbidden_patch = await client.patch(
+        f"/api/v1/admin/orders/{pending_id}/status",
+        headers=customer_headers,
+        json={"status": "cancelled"},
+    )
+    assert forbidden_patch.status_code == 403
+
+    # 1 & 2. Pending-payment order CANNOT transition to processing, shipped, or delivered -> 409 Conflict
+    for forbidden_status in ("processing", "shipped", "delivered"):
+        res_409 = await client.patch(
+            f"/api/v1/admin/orders/{pending_id}/status",
+            headers=admin_headers,
+            json={"status": forbidden_status, "note": "Should be rejected"},
+        )
+        assert res_409.status_code == 409, (forbidden_status, res_409.text)
+
+    # 6. Rejected transitions MUST preserve previous status, payment_status, and status_history untouched
+    after_rejected = (
+        await client.get(f"/api/v1/orders/{pending_id}", headers=admin_headers)
+    ).json()
+    assert after_rejected["status"] == "pending_payment"
+    assert after_rejected["payment_status"] == "pending"
+    assert after_rejected["stock_reserved"] is False
+    assert len(after_rejected["status_history"]) == 1
+    assert after_rejected["status_history"][0]["status"] == "pending_payment"
+
+    # 3. Pending-payment order CAN be cancelled -> 200 OK (remains unpaid and unreserved)
+    cancel_res = await client.patch(
+        f"/api/v1/admin/orders/{pending_id}/status",
+        headers=admin_headers,
+        json={"status": "cancelled", "note": "Customer requested cancellation"},
+    )
+    assert cancel_res.status_code == 200, cancel_res.text
+    cancelled_body = cancel_res.json()
+    assert cancelled_body["status"] == "cancelled"
+    assert cancelled_body["payment_status"] == "pending"
+    assert cancelled_body["stock_reserved"] is False
+    assert [h["status"] for h in cancelled_body["status_history"]] == [
+        "pending_payment",
+        "cancelled",
+    ]
+
+    # Cancelled order cannot reopen back to pending_payment -> 409 Conflict, history unchanged
+    reopen_res = await client.patch(
+        f"/api/v1/admin/orders/{pending_id}/status",
+        headers=admin_headers,
+        json={"status": "pending_payment"},
+    )
+    assert reopen_res.status_code == 409
+    assert (
+        len(
+            (
+                await client.get(
+                    f"/api/v1/orders/{pending_id}", headers=admin_headers
+                )
+            ).json()["status_history"]
+        )
+        == 2
+    )
+
+    # Seed a historical paid order (`payment_status="paid"`, `status="processing"`)
+    async for session in override_get_db():
+        paid_order = Order(
+            order_number="ARU-2025-PAID9001",
+            user_id=customer_id,
+            status="processing",
+            payment_status="paid",
+            payment_reference="ARU-PAY-HIST-9001",
+            subtotal=150.0,
+            discount_amount=0.0,
+            shipping_cost=0.0,
+            total=150.0,
+            total_toman=8_250_000,
+            customer_name="Historical Paid Buyer",
+            shipping_address="Tehran Jordan Blvd 12",
+        )
+        paid_order.status_history.append(
+            OrderStatusHistory(
+                status="processing",
+                note="Historical verified payment",
+            )
+        )
+        session.add(paid_order)
+        await session.commit()
+        paid_order_id = paid_order.id
+
+    # 5. Paid order CANNOT be reverted to `pending_payment` -> 409 Conflict, status & history unchanged
+    revert_res = await client.patch(
+        f"/api/v1/admin/orders/{paid_order_id}/status",
+        headers=admin_headers,
+        json={"status": "pending_payment"},
+    )
+    assert revert_res.status_code == 409
+    paid_check = (
+        await client.get(
+            f"/api/v1/orders/{paid_order_id}", headers=admin_headers
+        )
+    ).json()
+    assert paid_check["status"] == "processing"
+    assert len(paid_check["status_history"]) == 1
+
+    # 4. Paid historical order CAN follow valid fulfillment transitions: processing -> shipped -> delivered
+    ship_res = await client.patch(
+        f"/api/v1/admin/orders/{paid_order_id}/status",
+        headers=admin_headers,
+        json={"status": "shipped", "note": "Handed to courier"},
+    )
+    assert ship_res.status_code == 200
+    assert ship_res.json()["status"] == "shipped"
+    assert ship_res.json()["payment_status"] == "paid"
+    assert ship_res.json()["stock_reserved"] is True
+
+    # Paid shipped order STILL cannot revert to pending_payment or processing -> 409
+    assert (
+        await client.patch(
+            f"/api/v1/admin/orders/{paid_order_id}/status",
+            headers=admin_headers,
+            json={"status": "pending_payment"},
+        )
+    ).status_code == 409
+    assert (
+        await client.patch(
+            f"/api/v1/admin/orders/{paid_order_id}/status",
+            headers=admin_headers,
+            json={"status": "processing"},
+        )
+    ).status_code == 409
+
+    deliver_res = await client.patch(
+        f"/api/v1/admin/orders/{paid_order_id}/status",
+        headers=admin_headers,
+        json={"status": "delivered", "note": "Delivered to recipient"},
+    )
+    assert deliver_res.status_code == 200
+    delivered_body = deliver_res.json()
+    assert delivered_body["status"] == "delivered"
+    assert [h["status"] for h in delivered_body["status_history"]] == [
+        "processing",
+        "shipped",
+        "delivered",
+    ]
+

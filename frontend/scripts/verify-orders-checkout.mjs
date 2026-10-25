@@ -821,6 +821,67 @@ test('6. Checkout, PaymentForm, and Orders pages enforce pending-payment truthfu
   assert.equal(ordersPageSrc.includes('Pending Payment'), true)
   assert.equal(ordersPageSrc.includes('loadServerOrders'), true)
   assert.equal(ordersPageSrc.includes('s.orders)'), false)
-  assert.equal(adminOrdersSrc.includes("value: 'pending_payment'"), true)
+  assert.equal(
+    adminOrdersSrc.includes('getAllowedAdminOrderStatusOptions'),
+    true
+  )
   assert.equal(adminOrdersSrc.includes('fetchAdminOrders'), true)
+})
+
+test('7. Admin status options enforce payment-state transitions and createServerOrder rejects missing/blank Idempotency-Key', async () => {
+  const { getAllowedAdminOrderStatusOptions, createServerOrder } = ordersApiMod
+
+  // Unpaid pending_payment order can ONLY display pending_payment and cancelled (no processing, shipped, delivered)
+  const unpaidPendingOpts = getAllowedAdminOrderStatusOptions(
+    { status: 'pending_payment', paymentStatus: 'pending' },
+    'en'
+  ).map((o) => o.value)
+  assert.deepEqual(unpaidPendingOpts, ['pending_payment', 'cancelled'])
+
+  // Cancelled order is terminal
+  const unpaidCancelledOpts = getAllowedAdminOrderStatusOptions(
+    { status: 'cancelled', paymentStatus: 'pending' },
+    'fa'
+  ).map((o) => o.value)
+  assert.deepEqual(unpaidCancelledOpts, ['cancelled'])
+
+  // Paid order can transition along fulfillment states and NEVER back to pending_payment
+  const paidProcessingOpts = getAllowedAdminOrderStatusOptions(
+    { status: 'processing', paymentStatus: 'paid' },
+    'en'
+  ).map((o) => o.value)
+  assert.deepEqual(paidProcessingOpts, [
+    'processing',
+    'shipped',
+    'delivered',
+    'cancelled',
+  ])
+  assert.equal(paidProcessingOpts.includes('pending_payment'), false)
+
+  const paidShippedOpts = getAllowedAdminOrderStatusOptions(
+    { status: 'shipped', paymentStatus: 'paid' },
+    'en'
+  ).map((o) => o.value)
+  assert.deepEqual(paidShippedOpts, ['shipped', 'delivered', 'cancelled'])
+
+  const paidDeliveredOpts = getAllowedAdminOrderStatusOptions(
+    { status: 'delivered', paymentStatus: 'paid' },
+    'en'
+  ).map((o) => o.value)
+  assert.deepEqual(paidDeliveredOpts, ['delivered'])
+
+  // Client API helper rejects blank / whitespace / >128-char Idempotency-Key before network call
+  for (const invalidKey of ['', '   ', 'x'.repeat(129)]) {
+    await assert.rejects(
+      () =>
+        createServerOrder(
+          {
+            customer_name: 'Buyer',
+            shipping_address: 'Tehran Valiasr St 10',
+          },
+          invalidKey
+        ),
+      (err) => err.status === 400
+    )
+  }
 })

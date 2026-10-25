@@ -144,6 +144,23 @@ test('6. P0-C2 /api/v1/orders forwards Idempotency-Key and creates safe pending_
     postal_code: '1934567890',
   }
 
+  // Missing or blank Idempotency-Key is rejected with 400 on both slash variants
+  const missingKeyNoSlash = await fetch(`${NEXT_BASE}/api/v1/orders`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify(shippingBody),
+    redirect: 'manual',
+  })
+  assert.equal(missingKeyNoSlash.status, 400)
+
+  const blankKeySlash = await fetch(`${NEXT_BASE}/api/v1/orders/`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Idempotency-Key': '   ' },
+    body: JSON.stringify(shippingBody),
+    redirect: 'manual',
+  })
+  assert.equal(blankKeySlash.status, 400)
+
   const createRes = await fetch(`${NEXT_BASE}/api/v1/orders/`, {
     method: 'POST',
     headers: { ...authHeaders, 'Idempotency-Key': idemKey },
@@ -179,4 +196,30 @@ test('6. P0-C2 /api/v1/orders forwards Idempotency-Key and creates safe pending_
     redirect: 'manual',
   })
   assert.equal(conflictRes.status, 409)
+
+  // Admin attempting to move unpaid pending_payment order to processing receives 409 Conflict
+  const adminLoginRes = await fetch(`${NEXT_BASE}/api/v1/auth/login/json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email_or_username: 'admin@arustore.ir',
+      password: 'Admin1234!',
+    }),
+  })
+  assert.equal(adminLoginRes.status, 200)
+  const { access_token: adminToken } = await adminLoginRes.json()
+
+  const forbiddenTransitionRes = await fetch(
+    `${NEXT_BASE}/api/v1/admin/orders/${createdOrder.id}/status`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'processing' }),
+      redirect: 'manual',
+    }
+  )
+  assert.equal(forbiddenTransitionRes.status, 409)
 })

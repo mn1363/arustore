@@ -3,7 +3,11 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import Select from '@/components/ui/Select'
 import { useStore } from '@/lib/store/useStore'
-import { fetchAdminOrders, updateAdminOrderStatus } from '@/lib/api/orders'
+import {
+  fetchAdminOrders,
+  getAllowedAdminOrderStatusOptions,
+  updateAdminOrderStatus,
+} from '@/lib/api/orders'
 import { formatPrice } from '@/lib/utils'
 import { ServerOrder } from '@/types'
 
@@ -103,80 +107,73 @@ export default function AdminOrdersPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => (
-            <div
-              key={order.id}
-              className="rounded-2xl surface-level-1 p-5 flex flex-wrap items-center justify-between gap-4"
-            >
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    dir="ltr"
-                    className="text-sm font-mono font-bold text-[#f4f4f6]"
-                  >
-                    {order.orderNumber}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      order.paymentStatus === 'paid'
-                        ? 'bg-emerald-500/12 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-[#dfc08e]/12 text-[#dfc08e] border border-[#dfc08e]/30'
-                    }`}
-                  >
-                    {order.paymentStatus === 'paid'
-                      ? locale === 'fa'
-                        ? 'پرداخت شده'
-                        : 'Paid'
-                      : locale === 'fa'
-                      ? 'پرداخت نشده (عدم رزرو موجودی)'
-                      : 'Unpaid (Stock Not Reserved)'}
-                  </span>
-                </div>
-                <div className="text-xs text-[#979fb2]">
-                  {order.customerName} • {order.shippingAddress}
-                </div>
-                <div className="text-xs font-bold text-[#dfc08e]">
-                  {formatPrice(order.totalUsd, locale, order.totalToman)}
-                </div>
-              </div>
+          {orders.map((order) => {
+            const allowedOptions = getAllowedAdminOrderStatusOptions(
+              order,
+              locale
+            )
+            const isTerminalOrLocked = allowedOptions.length <= 1
 
-              <div className="w-52">
-                <Select
-                  value={order.status}
-                  disabled={updatingId === order.id}
-                  onChange={(e) =>
-                    void handleStatusChange(order.id, e.target.value)
-                  }
-                  options={[
-                    {
-                      value: 'pending_payment',
-                      label:
-                        locale === 'fa'
-                          ? 'در انتظار پرداخت'
-                          : 'Pending Payment',
-                    },
-                    {
-                      value: 'processing',
-                      label:
-                        locale === 'fa' ? 'در حال پردازش' : 'Processing',
-                    },
-                    {
-                      value: 'shipped',
-                      label: locale === 'fa' ? 'ارسال شده' : 'Shipped',
-                    },
-                    {
-                      value: 'delivered',
-                      label: locale === 'fa' ? 'تحویل شده' : 'Delivered',
-                    },
-                    {
-                      value: 'cancelled',
-                      label: locale === 'fa' ? 'لغو شده' : 'Cancelled',
-                    },
-                  ]}
-                />
+            return (
+              <div
+                key={order.id}
+                className="rounded-2xl surface-level-1 p-5 flex flex-wrap items-center justify-between gap-4"
+              >
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      dir="ltr"
+                      className="text-sm font-mono font-bold text-[#f4f4f6]"
+                    >
+                      {order.orderNumber}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                        order.paymentStatus === 'paid'
+                          ? 'bg-emerald-500/12 text-emerald-300 border border-emerald-500/30'
+                          : 'bg-[#dfc08e]/12 text-[#dfc08e] border border-[#dfc08e]/30'
+                      }`}
+                    >
+                      {order.paymentStatus === 'paid'
+                        ? locale === 'fa'
+                          ? 'پرداخت شده'
+                          : 'Paid'
+                        : locale === 'fa'
+                        ? 'پرداخت نشده (عدم رزرو موجودی)'
+                        : 'Unpaid (Stock Not Reserved)'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#979fb2]">
+                    {order.customerName} • {order.shippingAddress}
+                  </div>
+                  <div className="text-xs font-bold text-[#dfc08e]">
+                    {formatPrice(order.totalUsd, locale, order.totalToman)}
+                  </div>
+                </div>
+
+                <div className="w-56 space-y-1">
+                  <Select
+                    value={order.status}
+                    disabled={updatingId === order.id || isTerminalOrLocked}
+                    onChange={(e) => {
+                      if (e.target.value !== order.status) {
+                        void handleStatusChange(order.id, e.target.value)
+                      }
+                    }}
+                    options={allowedOptions}
+                  />
+                  {order.paymentStatus !== 'paid' &&
+                    order.status !== 'cancelled' && (
+                      <p className="text-[11px] text-[#979fb2]">
+                        {locale === 'fa'
+                          ? 'ارسال سفارش پیش از پرداخت مجاز نیست'
+                          : 'Fulfillment statuses require payment'}
+                      </p>
+                    )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
