@@ -1,5 +1,6 @@
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.security import get_password_hash
 from app.models.brand import Brand
@@ -10,54 +11,139 @@ from app.models.review import Review
 from app.models.user import Address, User
 
 
-async def seed_initial_catalog(db: AsyncSession) -> None:
-    """Idempotently populate aluminum servingware catalog, brands, discounts, and demo users."""
-    existing_count = (await db.execute(select(Product.id).limit(1))).scalar_one_or_none()
-    if existing_count is not None:
-        return
+async def _seed_demo_users_and_review(
+    db: AsyncSession, sample_product: Product
+) -> None:
+    """Idempotently populate non-production demo users, collector address, and sample review."""
+    admin_user = (
+        await db.execute(
+            select(User)
+            .where(
+                or_(
+                    User.email == "admin@arustore.ir",
+                    User.username == "admin",
+                    User.phone == "09121112233",
+                )
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if admin_user is None:
+        admin_user = User(
+            email="admin@arustore.ir",
+            username="admin",
+            phone="09121112233",
+            full_name="مدیر کارگاه آرو استور",
+            password_hash=get_password_hash("Admin1234!"),
+            loyalty_points=2500,
+            loyalty_tier="Gold",
+            is_active=True,
+            is_admin=True,
+            is_verified=True,
+        )
+        db.add(admin_user)
 
-    # 1. Demo Users
-    admin_user = User(
-        email="admin@arustore.ir",
-        username="admin",
-        phone="09121112233",
-        full_name="مدیر کارگاه آرو استور",
-        password_hash=get_password_hash("Admin1234!"),
-        loyalty_points=2500,
-        loyalty_tier="Gold",
-        is_active=True,
-        is_admin=True,
-        is_verified=True,
-    )
-    collector_user = User(
-        email="arian@arustore.ir",
-        username="arian",
-        phone="09123456789",
-        full_name="آرین رادمهر",
-        password_hash=get_password_hash("Arian1234!"),
-        loyalty_points=640,
-        loyalty_tier="Gold",
-        is_active=True,
-        is_admin=False,
-        is_verified=True,
-    )
-    db.add_all([admin_user, collector_user])
+    collector_user = (
+        await db.execute(
+            select(User)
+            .where(
+                or_(
+                    User.email == "arian@arustore.ir",
+                    User.username == "arian",
+                    User.phone == "09123456789",
+                )
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if collector_user is None:
+        collector_user = User(
+            email="arian@arustore.ir",
+            username="arian",
+            phone="09123456789",
+            full_name="آرین رادمهر",
+            password_hash=get_password_hash("Arian1234!"),
+            loyalty_points=640,
+            loyalty_tier="Gold",
+            is_active=True,
+            is_admin=False,
+            is_verified=True,
+        )
+        db.add(collector_user)
+
     await db.flush()
 
-    db.add(
-        Address(
-            user_id=collector_user.id,
-            title="منزل",
-            recipient_name="آرین رادمهر",
-            phone="09123456789",
-            city="تهران",
-            address_line="زعفرانیه، خیابان مقدس اردبیلی، پلاک ۴۲، واحد ۸",
-            postal_code="1987654321",
-            is_default=True,
+    existing_address_id = (
+        await db.execute(
+            select(Address.id)
+            .where(
+                Address.user_id == collector_user.id,
+                Address.postal_code == "1987654321",
+            )
+            .limit(1)
         )
-    )
+    ).scalar_one_or_none()
+    if existing_address_id is None:
+        existing_default_addr_id = (
+            await db.execute(
+                select(Address.id)
+                .where(
+                    Address.user_id == collector_user.id,
+                    Address.is_default.is_(True),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        db.add(
+            Address(
+                user_id=collector_user.id,
+                title="منزل",
+                recipient_name="آرین رادمهر",
+                phone="09123456789",
+                city="تهران",
+                address_line="زعفرانیه، خیابان مقدس اردبیلی، پلاک ۴۲، واحد ۸",
+                postal_code="1987654321",
+                is_default=(existing_default_addr_id is None),
+            )
+        )
 
-    # 2. Categories
+    existing_review_id = (
+        await db.execute(
+            select(Review.id)
+            .where(
+                Review.product_id == sample_product.id,
+                Review.user_id == collector_user.id,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing_review_id is None:
+        db.add(
+            Review(
+                product_id=sample_product.id,
+                user_id=collector_user.id,
+                rating=5,
+                title="کیفیت پرداخت عالی",
+                comment="بدنه کاملاً سنگین و خوش‌تراش است و اصلاً لک آب روی آن نمی‌ماند.",
+                is_verified_purchase=True,
+                is_approved=True,
+            )
+        )
+
+
+async def seed_catalog_only(db: AsyncSession) -> None:
+    """Idempotently populate catalog products, categories, brands, and discounts without demo users."""
+    await seed_initial_catalog(db, include_demo_data=False)
+
+
+async def seed_initial_catalog(
+    db: AsyncSession, *, include_demo_data: bool = True
+) -> None:
+    """Idempotently populate catalog entities and (only when include_demo_data=True) demo accounts."""
+    # 1. Categories
+    existing_cats = {
+        c.slug: c for c in (await db.execute(select(Category))).scalars().all()
+    }
     categories_data = [
         Category(
             name="Pastry & Tiered Stands",
@@ -96,11 +182,17 @@ async def seed_initial_catalog(db: AsyncSession) -> None:
             sort_order=4,
         ),
     ]
-    db.add_all(categories_data)
+    for c in categories_data:
+        if c.slug not in existing_cats:
+            db.add(c)
+            existing_cats[c.slug] = c
     await db.flush()
-    cat_by_slug = {c.slug: c for c in categories_data}
+    cat_by_slug = existing_cats
 
-    # 3. Brands
+    # 2. Brands
+    existing_brands = {
+        b.slug: b for b in (await db.execute(select(Brand))).scalars().all()
+    }
     brands_data = [
         Brand(
             name="Aru Cast Atelier",
@@ -135,9 +227,12 @@ async def seed_initial_catalog(db: AsyncSession) -> None:
             country="Iran",
         ),
     ]
-    db.add_all(brands_data)
+    for b in brands_data:
+        if b.slug not in existing_brands:
+            db.add(b)
+            existing_brands[b.slug] = b
     await db.flush()
-    brand_by_slug = {b.slug: b for b in brands_data}
+    brand_by_slug = existing_brands
 
     default_colors = [
         {"id": "champagne", "name": "Champagne Gold", "name_fa": "شامپاینی مات", "hex": "#d8dee9", "accentHex": "#d6b88a"},
@@ -350,10 +445,54 @@ async def seed_initial_catalog(db: AsyncSession) -> None:
         },
     ]
 
-    created_products: list[Product] = []
+    initial_rating_avg = 4.9 if include_demo_data else 0.0
+    initial_review_count = 1 if include_demo_data else 0
+
+    valid_cat_ids = {c.id for c in cat_by_slug.values()}
+    valid_brand_ids = {b.id for b in brand_by_slug.values()}
+
+    existing_products = (
+        await db.execute(
+            select(Product)
+            .options(selectinload(Product.images))
+            .order_by(Product.id.asc())
+        )
+    ).scalars().all()
+    existing_by_sku = {p.sku: p for p in existing_products}
+    existing_by_slug = {p.slug: p for p in existing_products}
+
+    catalog_products: list[Product] = []
     for pdata in products_seed:
         cat = cat_by_slug[pdata["cat"]]
         brand = brand_by_slug[pdata["brand"]]
+        existing_prod = existing_by_sku.get(pdata["sku"]) or existing_by_slug.get(
+            pdata["slug"]
+        )
+        if existing_prod is not None:
+            if (
+                existing_prod.primary_category_id is None
+                or existing_prod.primary_category_id not in valid_cat_ids
+            ):
+                existing_prod.primary_category_id = cat.id
+            if (
+                existing_prod.brand_id is None
+                or existing_prod.brand_id not in valid_brand_ids
+            ):
+                existing_prod.brand_id = brand.id
+            if not existing_prod.images and not any(
+                img.url == pdata["img"] for img in existing_prod.images
+            ):
+                existing_prod.images.append(
+                    ProductImage(
+                        url=pdata["img"],
+                        alt=pdata["name_fa"],
+                        is_primary=True,
+                        sort_order=0,
+                    )
+                )
+            catalog_products.append(existing_prod)
+            continue
+
         prod = Product(
             sku=pdata["sku"],
             slug=pdata["slug"],
@@ -381,8 +520,8 @@ async def seed_initial_catalog(db: AsyncSession) -> None:
                 {"id": "standard", "label": "Standard Box", "label_fa": "بسته‌بندی استاندارد", "priceDelta": 0, "priceDeltaToman": 0},
                 {"id": "gift", "label": "Velvet Gift Case", "label_fa": "جعبه هدیه مخمل‌کوب", "priceDelta": 12, "priceDeltaToman": 660000},
             ],
-            rating_avg=4.9,
-            review_count=1,
+            rating_avg=initial_rating_avg,
+            review_count=initial_review_count,
         )
         prod.images.append(
             ProductImage(
@@ -393,41 +532,79 @@ async def seed_initial_catalog(db: AsyncSession) -> None:
             )
         )
         db.add(prod)
-        created_products.append(prod)
+        catalog_products.append(prod)
 
     await db.flush()
 
-    # 4. Discounts
-    db.add_all(
-        [
-            Discount(
-                code="ARU3D",
-                description="15% launch discount",
-                discount_percent=15.0,
-                min_order_amount=50.0,
-                is_active=True,
-            ),
-            Discount(
-                code="VIP20",
-                description="20% collector discount",
-                discount_percent=20.0,
-                min_order_amount=100.0,
-                is_active=True,
-            ),
-        ]
-    )
+    if not include_demo_data and catalog_products:
+        # Ensure rating_avg and review_count strictly match actual approved reviews in DB
+        # across all catalog products from products_seed (both existing and newly created).
+        prod_ids = [p.id for p in catalog_products]
+        agg_rows = (
+            await db.execute(
+                select(
+                    Review.product_id,
+                    func.avg(Review.rating),
+                    func.count(Review.id),
+                )
+                .where(
+                    Review.product_id.in_(prod_ids),
+                    Review.is_approved.is_(True),
+                )
+                .group_by(Review.product_id)
+            )
+        ).all()
+        agg_by_pid = {
+            int(row[0]): (
+                round(float(row[1]), 2) if row[1] is not None else 0.0,
+                int(row[2] or 0),
+            )
+            for row in agg_rows
+        }
+        for prod in catalog_products:
+            avg_val, cnt_val = agg_by_pid.get(int(prod.id), (0.0, 0))
+            target_avg = avg_val if cnt_val > 0 else 0.0
+            if prod.rating_avg != target_avg:
+                prod.rating_avg = target_avg
+            if prod.review_count != cnt_val:
+                prod.review_count = cnt_val
 
-    # 5. Sample verified review
-    db.add(
-        Review(
-            product_id=created_products[0].id,
-            user_id=collector_user.id,
-            rating=5,
-            title="کیفیت پرداخت عالی",
-            comment="بدنه کاملاً سنگین و خوش‌تراش است و اصلاً لک آب روی آن نمی‌ماند.",
-            is_verified_purchase=True,
-            is_approved=True,
+    # 3. Sample Discounts
+    existing_discount_codes = set(
+        (
+            await db.execute(
+                select(Discount.code).where(Discount.code.in_(("ARU3D", "VIP20")))
+            )
         )
+        .scalars()
+        .all()
     )
+    sample_discounts = [
+        Discount(
+            code="ARU3D",
+            description="15% launch discount",
+            discount_percent=15.0,
+            min_order_amount=50.0,
+            is_active=True,
+        ),
+        Discount(
+            code="VIP20",
+            description="20% collector discount",
+            discount_percent=20.0,
+            min_order_amount=100.0,
+            is_active=True,
+        ),
+    ]
+    for disc in sample_discounts:
+        if disc.code not in existing_discount_codes:
+            db.add(disc)
+
+    # 4. Demo users, address, and sample review (strictly skipped in catalog-only mode)
+    if include_demo_data and catalog_products:
+        sample_prod = next(
+            (p for p in catalog_products if p.sku == "ARU-101"),
+            catalog_products[0],
+        )
+        await _seed_demo_users_and_review(db, sample_prod)
 
     await db.commit()

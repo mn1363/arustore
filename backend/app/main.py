@@ -23,6 +23,7 @@ from app.core.config import Settings, settings
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.elasticsearch import es_client
 from app.core.redis import cache_manager
+from app.services.order_service import TrialOrderSubmissionDisabledError
 from app.services.payment_lifecycle_service import PaymentContractError
 from app.services.seed_service import seed_initial_catalog
 
@@ -154,9 +155,15 @@ def create_application(app_settings: Settings = settings) -> FastAPI:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-        if app_settings.AUTO_SEED_DEMO_DATA and not app_settings.is_production:
+        should_seed_demo = bool(
+            app_settings.AUTO_SEED_DEMO_DATA and not app_settings.is_production
+        )
+        if should_seed_demo:
             async with AsyncSessionLocal() as session:
-                await seed_initial_catalog(session)
+                await seed_initial_catalog(session, include_demo_data=True)
+        elif app_settings.AUTO_SEED_CATALOG:
+            async with AsyncSessionLocal() as session:
+                await seed_initial_catalog(session, include_demo_data=False)
 
         yield
 
@@ -175,6 +182,18 @@ def create_application(app_settings: Settings = settings) -> FastAPI:
     @application.exception_handler(PaymentContractError)
     async def handle_payment_contract_error(
         _request: Request, exc: PaymentContractError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "code": exc.code,
+                "detail": f"{exc.code}: {exc.message}",
+            },
+        )
+
+    @application.exception_handler(TrialOrderSubmissionDisabledError)
+    async def handle_trial_order_disabled_error(
+        _request: Request, exc: TrialOrderSubmissionDisabledError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,

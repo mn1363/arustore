@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import Settings, settings
 from app.models.cart import CartItem
 from app.models.order import (
     Order,
@@ -62,9 +63,24 @@ PAID_ALLOWED_NEXT_STATUSES: Dict[str, set[str]] = {
 }
 
 
+class TrialOrderSubmissionDisabledError(Exception):
+    def __init__(
+        self,
+        code: str = "trial_mode_order_submission_disabled",
+        message: str = "Final order submission is disabled during the trial preview.",
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        self.code = code
+        self.message = message
+
+
 class OrderService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self, db: AsyncSession, app_settings: Optional[Settings] = None
+    ) -> None:
         self.db = db
+        self.settings = app_settings or settings
 
     def _order_query(self):
         return select(Order).options(
@@ -132,6 +148,8 @@ class OrderService:
         payload: OrderCreate,
         idempotency_key: str,
     ) -> OrderResponse:
+        if self.settings.TRIAL_MODE:
+            raise TrialOrderSubmissionDisabledError()
         if idempotency_key is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

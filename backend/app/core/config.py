@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # None resolves to False in production and True in development/test.
     # Explicitly enabling AUTO_SEED_DEMO_DATA=True in production fails startup.
     AUTO_SEED_DEMO_DATA: Optional[bool] = None
+    # Independent catalog-only seed flag (products, categories, brands, sample discounts;
+    # never creates demo users, fixed admins, addresses, or demo reviews).
+    AUTO_SEED_CATALOG: bool = False
+    # Explicit server-side trial mode guard: when True, blocks final order creation
+    # (POST /api/v1/orders/) before any DB write while keeping catalog, auth, and cart active.
+    TRIAL_MODE: bool = False
 
     ALLOWED_HOSTS: List[str] = [
         "localhost",
@@ -99,6 +105,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
+        if self.TRIAL_MODE and (
+            self.PAYMENT_PROVIDER != "disabled"
+            or self.PAYMENT_SANDBOX_ENABLED is True
+        ):
+            raise ValueError(
+                "Invalid trial configuration: PAYMENT_PROVIDER must remain 'disabled' "
+                "and PAYMENT_SANDBOX_ENABLED must be False when TRIAL_MODE=True."
+            )
+
         if self.is_production:
             if self.PAYMENT_PROVIDER == "sandbox" or self.PAYMENT_SANDBOX_ENABLED is True:
                 raise ValueError(
