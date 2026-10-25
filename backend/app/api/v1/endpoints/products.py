@@ -20,17 +20,21 @@ router = APIRouter()
 
 
 @router.get("/", response_model=PaginatedProductsResponse)
+@router.get("", response_model=PaginatedProductsResponse, include_in_schema=False)
 async def get_products(
     category_id: Optional[int] = Query(None),
     category_slug: Optional[str] = Query(None),
     brand_id: Optional[int] = Query(None),
     brand_slug: Optional[str] = Query(None),
+    brand_slugs: Optional[List[str]] = Query(None),
+    color: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
     search: Optional[str] = Query(None),
     in_stock: Optional[bool] = Query(None),
     is_on_sale: Optional[bool] = Query(None),
     is_featured: Optional[bool] = Query(None),
+    is_new: Optional[bool] = Query(None),
     sort_by: str = Query("newest"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -41,12 +45,15 @@ async def get_products(
         category_slug=category_slug,
         brand_id=brand_id,
         brand_slug=brand_slug,
+        brand_slugs=brand_slugs,
+        color=color,
         min_price=min_price,
         max_price=max_price,
         search=search,
         in_stock=in_stock,
         is_on_sale=is_on_sale,
         is_featured=is_featured,
+        is_new=is_new,
         sort_by=sort_by,
     )
     return await ProductService(db).list_products(filters, page, page_size)

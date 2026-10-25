@@ -1,6 +1,6 @@
 from typing import Optional, Union
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import String, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,9 +22,49 @@ from app.tasks.search_tasks import (
     remove_product_from_search_task,
     sync_product_to_search_task,
 )
-from app.utils.pagination import paginate_select
+from app.utils.pagination import build_pagination_meta, paginate_select
 from app.utils.slugify import ensure_unique_slug, generate_slug
 from app.utils.validators import normalize_sku
+
+# Non-destructive compatibility aliases mapping legacy pre-P0-B1 frontend URLs
+# to canonical backend seeded slugs without mutating persisted database slugs.
+LEGACY_PRODUCT_SLUG_ALIASES: dict[str, str] = {
+    "royal-3tier-aluminum-stand": "shahnameh-3tier-aluminum-pastry-stand",
+    "imperial-engraved-aluminum-tray": "persepolis-engraved-aluminum-serving-tray",
+    "zarrin-hammered-aluminum-nut-dish": "domed-hammered-aluminum-nut-chalice",
+    "negin-4bowl-aluminum-ordu-platter": "chaharbagh-4bowl-aluminum-ordur-platter",
+    "isfahan-aluminum-tea-sugar-service": "isfahan-anodized-aluminum-tea-hospitality-set",
+    "arulux-3arm-aluminum-candelabra": "aria-3arm-cast-aluminum-candelabra",
+    "mowj-sculptural-aluminum-kashkool": "kashkool-sculptural-aluminum-centerpiece",
+}
+
+LEGACY_CATEGORY_SLUG_ALIASES: dict[str, str] = {
+    "stands-fruit-bowls": "pastry-stands",
+    "trays-tea-sets": "serving-trays",
+    "nut-ordu-dishes": "nut-ordur",
+    "candelabra-centerpieces": "fruit-vessels",
+}
+
+LEGACY_BRAND_SLUG_ALIASES: dict[str, str] = {
+    "arumetal-atelier": "aru-atelier",
+    "aruanodize-royal": "zarrin-anodize",
+    "aruform-cnc": "parsia-form",
+    "arubridal-heritage": "simin-craft",
+}
+
+
+def _product_matches_color(product: Product, raw_color: str) -> bool:
+    needle = raw_color.strip().lower()
+    if not needle:
+        return True
+    for entry in product.colors or []:
+        if not isinstance(entry, dict):
+            continue
+        for key in ("id", "hex", "accentHex"):
+            val = entry.get(key)
+            if isinstance(val, str) and val.strip().lower() == needle:
+                return True
+    return False
 
 
 def serialize_product_model(product: Product) -> ProductResponse:
@@ -95,25 +135,56 @@ class ProductService:
         if filters.category_id is not None:
             stmt = stmt.where(Product.primary_category_id == filters.category_id)
         if filters.category_slug and filters.category_slug != "all":
-            stmt = stmt.join(Category, Product.primary_category_id == Category.id).where(
-                Category.slug == filters.category_slug
+            raw_cat_slug = filters.category_slug.strip()
+            resolved_cat_slug = LEGACY_CATEGORY_SLUG_ALIASES.get(
+                raw_cat_slug, raw_cat_slug
             )
+            cat_candidates = list({raw_cat_slug, resolved_cat_slug})
+            stmt = stmt.join(
+                Category, Product.primary_category_id == Category.id
+            ).where(Category.slug.in_(cat_candidates))
+
         if filters.brand_id is not None:
             stmt = stmt.where(Product.brand_id == filters.brand_id)
+
+        raw_brand_values: list[str] = []
         if filters.brand_slug:
+            raw_brand_values.append(filters.brand_slug)
+        if filters.brand_slugs:
+            raw_brand_values.extend(filters.brand_slugs)
+
+        effective_brand_slugs: list[str] = []
+        for raw_val in raw_brand_values:
+            for part in raw_val.split(","):
+                cleaned = part.strip()
+                if not cleaned:
+                    continue
+                effective_brand_slugs.append(cleaned)
+                aliased = LEGACY_BRAND_SLUG_ALIASES.get(cleaned)
+                if aliased:
+                    effective_brand_slugs.append(aliased)
+
+        if effective_brand_slugs:
             stmt = stmt.join(Brand, Product.brand_id == Brand.id).where(
-                Brand.slug == filters.brand_slug
+                Brand.slug.in_(list(dict.fromkeys(effective_brand_slugs)))
             )
+
         if filters.min_price is not None:
             stmt = stmt.where(Product.price >= filters.min_price)
         if filters.max_price is not None:
             stmt = stmt.where(Product.price <= filters.max_price)
-        if filters.in_stock is not None:
-            stmt = stmt.where(Product.in_stock.is_(filters.in_stock))
+        if filters.in_stock is True:
+            stmt = stmt.where(Product.in_stock.is_(True), Product.stock_quantity > 0)
+        elif filters.in_stock is False:
+            stmt = stmt.where(
+                or_(Product.in_stock.is_(False), Product.stock_quantity <= 0)
+            )
         if filters.is_on_sale is not None:
             stmt = stmt.where(Product.is_on_sale.is_(filters.is_on_sale))
         if filters.is_featured is not None:
             stmt = stmt.where(Product.is_featured.is_(filters.is_featured))
+        if filters.is_new is not None:
+            stmt = stmt.where(Product.is_new.is_(filters.is_new))
 
         if filters.search:
             search_service = SearchService(self.db)
@@ -124,14 +195,35 @@ class ProductService:
                 else:
                     stmt = stmt.where(Product.id.in_(matched_ids))
 
-        sort_map = {
-            "price-asc": Product.price.asc(),
-            "price-desc": Product.price.desc(),
-            "rating": Product.rating_avg.desc(),
-            "featured": Product.is_featured.desc(),
-            "newest": Product.id.desc(),
+        sort_clauses = {
+            "price-asc": (Product.price.asc(), Product.id.asc()),
+            "price-desc": (Product.price.desc(), Product.id.asc()),
+            "rating": (Product.rating_avg.desc(), Product.id.asc()),
+            "featured": (Product.is_featured.desc(), Product.id.asc()),
+            "newest": (Product.id.desc(),),
         }
-        stmt = stmt.order_by(sort_map.get(filters.sort_by, Product.id.desc()))
+        stmt = stmt.order_by(*sort_clauses.get(filters.sort_by, (Product.id.desc(),)))
+
+        if filters.color and filters.color.strip():
+            color_needle = filters.color.strip()
+            safe_page = max(1, page)
+            safe_size = max(1, min(page_size, 100))
+            color_stmt = stmt.where(
+                cast(Product.colors, String).ilike(f"%{color_needle}%")
+            )
+            candidates = (
+                (await self.db.execute(color_stmt)).scalars().unique().all()
+            )
+            matched = [
+                p for p in candidates if _product_matches_color(p, color_needle)
+            ]
+            meta = build_pagination_meta(len(matched), safe_page, safe_size)
+            start = (safe_page - 1) * safe_size
+            paged = matched[start : start + safe_size]
+            return PaginatedProductsResponse(
+                items=[serialize_product_model(p) for p in paged],
+                meta=meta,
+            )
 
         rows, meta = await paginate_select(self.db, stmt, page=page, page_size=page_size)
         return PaginatedProductsResponse(
@@ -142,13 +234,31 @@ class ProductService:
     async def get_product(
         self, identifier: Union[int, str]
     ) -> Optional[ProductResponse]:
-        stmt = self._base_query()
         if isinstance(identifier, int) or str(identifier).isdigit():
-            stmt = stmt.where(Product.id == int(identifier))
+            stmt = self._base_query().where(Product.id == int(identifier))
+            product = (await self.db.execute(stmt)).scalar_one_or_none()
         else:
-            stmt = stmt.where(Product.slug == str(identifier))
+            raw_ident = str(identifier).strip()
+            product = (
+                await self.db.execute(
+                    self._base_query().where(Product.slug == raw_ident)
+                )
+            ).scalar_one_or_none()
+            if not product:
+                aliased_slug = LEGACY_PRODUCT_SLUG_ALIASES.get(raw_ident)
+                if aliased_slug:
+                    product = (
+                        await self.db.execute(
+                            self._base_query().where(Product.slug == aliased_slug)
+                        )
+                    ).scalar_one_or_none()
+            if not product:
+                product = (
+                    await self.db.execute(
+                        self._base_query().where(Product.sku == raw_ident.upper())
+                    )
+                ).scalar_one_or_none()
 
-        product = (await self.db.execute(stmt)).scalar_one_or_none()
         if not product:
             return None
         product.view_count = (product.view_count or 0) + 1

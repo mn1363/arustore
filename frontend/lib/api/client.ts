@@ -177,7 +177,15 @@ async function apiFetch<T>(
       credentials: rest.credentials ?? 'include',
       headers: mergedHeaders,
     })
-  } catch {
+  } catch (err) {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'name' in err &&
+      (err as { name?: unknown }).name === 'AbortError'
+    ) {
+      throw err
+    }
     throw new ApiError('Network connection error', 0)
   }
 
@@ -280,12 +288,38 @@ export const aruApi = {
     dashboard: () => apiFetch<Record<string, unknown>>('/admin/dashboard'),
   },
   catalog: {
-    listProducts: (query = '') =>
-      apiFetch(`/products/${query ? `?${query}` : ''}`),
-    getProduct: (slugOrId: string | number) =>
-      apiFetch(`/products/${slugOrId}`),
-    listCategories: () => apiFetch('/categories/'),
-    listBrands: () => apiFetch('/brands/'),
+    listProducts: <T = unknown>(query = '', options?: ApiRequestOptions) =>
+      apiFetch<T>(`/products/${query ? `?${query}` : ''}`, {
+        skipAuthRefresh: true,
+        ...options,
+      }),
+    getProduct: <T = unknown>(
+      slugOrId: string | number,
+      options?: ApiRequestOptions
+    ) =>
+      apiFetch<T>(`/products/${encodeURIComponent(String(slugOrId))}`, {
+        skipAuthRefresh: true,
+        ...options,
+      }),
+    getRelatedProducts: <T = unknown>(
+      productId: number,
+      limit = 4,
+      options?: ApiRequestOptions
+    ) =>
+      apiFetch<T>(`/products/${productId}/related?limit=${limit}`, {
+        skipAuthRefresh: true,
+        ...options,
+      }),
+    listCategories: <T = unknown>(options?: ApiRequestOptions) =>
+      apiFetch<T>('/categories/', {
+        skipAuthRefresh: true,
+        ...options,
+      }),
+    listBrands: <T = unknown>(options?: ApiRequestOptions) =>
+      apiFetch<T>('/brands/', {
+        skipAuthRefresh: true,
+        ...options,
+      }),
   },
   cart: {
     get: (token?: string, promoCode?: string) =>
@@ -324,8 +358,14 @@ export const aruApi = {
     listMine: (token?: string) => apiFetch('/orders/', { token }),
   },
   reviews: {
-    listForProduct: (productId: number) =>
-      apiFetch(`/reviews/product/${productId}`),
+    listForProduct: <T = unknown>(
+      productId: number,
+      options?: ApiRequestOptions
+    ) =>
+      apiFetch<T>(`/reviews/product/${productId}`, {
+        skipAuthRefresh: true,
+        ...options,
+      }),
     create: (
       token: string | undefined,
       payload: {

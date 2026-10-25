@@ -1,14 +1,8 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
+import { deriveAvailableFinishOptions } from '@/lib/api/catalog'
 import { useStore } from '@/lib/store/useStore'
-
-const FINISH_PALETTE = [
-  { id: '#eab308', label: 'Champagne Gold', label_fa: 'شامپاینی مات', hex: '#dfc08e' },
-  { id: '#e2e8f0', label: 'Brushed Silver', label_fa: 'نقره‌ای برس‌خورده', hex: '#e2e8f0' },
-  { id: '#d97706', label: 'Warm Bronze', label_fa: 'برنزی گرم', hex: '#b6864f' },
-  { id: '#cbd5e1', label: 'Smoked Pewter', label_fa: 'دودی مات', hex: '#64748b' },
-]
 
 export default function ColorFilter({
   selectedColor,
@@ -18,6 +12,12 @@ export default function ColorFilter({
   onSelectColor: (color?: string) => void
 }) {
   const locale = useStore((s) => s.locale)
+  const catalogProducts = useStore((s) => s.products)
+
+  const finishes = useMemo(
+    () => deriveAvailableFinishOptions(catalogProducts),
+    [catalogProducts]
+  )
 
   return (
     <div className="space-y-2.5">
@@ -25,7 +25,7 @@ export default function ColorFilter({
         {locale === 'fa' ? 'پوشش رنگ' : 'Finish'}
       </h4>
       <div className="flex flex-wrap gap-2">
-        {FINISH_PALETTE.map((c) => {
+        {finishes.map((c) => {
           const active = selectedColor === c.id
           return (
             <button

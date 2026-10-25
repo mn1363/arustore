@@ -11,7 +11,7 @@ import {
   ProductReview,
   UserProfile,
 } from '@/types'
-import { PRODUCTS } from '@/lib/data/catalog'
+import { DEFAULT_ALUMINUM_FINISH } from '@/lib/data/catalog'
 import {
   ApiError,
   aruApi,
@@ -110,6 +110,7 @@ interface AppState {
   toggleLocale: () => void
 
   products: Product[]
+  upsertCatalogProducts: (incoming: Product[]) => void
   addProductReview: (
     productId: number,
     review: Omit<ProductReview, 'id' | 'created_at'>
@@ -180,7 +181,19 @@ export const useStore = create<AppState>()(
       toggleLocale: () =>
         set((state) => ({ locale: state.locale === 'fa' ? 'en' : 'fa' })),
 
-      products: PRODUCTS,
+      products: [],
+      upsertCatalogProducts: (incoming) =>
+        set((state) => {
+          if (!incoming.length) return state
+          const merged = new Map<number, Product>()
+          for (const existing of state.products) {
+            merged.set(existing.id, existing)
+          }
+          for (const item of incoming) {
+            merged.set(item.id, item)
+          }
+          return { products: Array.from(merged.values()) }
+        }),
       addProductReview: (productId, reviewData) => {
         const newReview: ProductReview = {
           ...reviewData,
@@ -217,20 +230,12 @@ export const useStore = create<AppState>()(
           ),
         })),
 
-      cart: [
-        {
-          id: '1-silver-champagne-3-tier',
-          product: PRODUCTS[0],
-          quantity: 1,
-          selectedColor: PRODUCTS[0].colors[0],
-          selectedEdition: '3-tier',
-        },
-      ],
+      cart: [],
       isCartDrawerOpen: false,
       setCartDrawerOpen: (open) => set({ isCartDrawerOpen: open }),
 
       addToCart: (product, quantity = 1, color, edition) => {
-        const chosenColor = color || product.colors[0]
+        const chosenColor = color || product.colors[0] || DEFAULT_ALUMINUM_FINISH
         const chosenEdition = edition || product.editions?.[0]?.id || 'default'
         const itemId = `${product.id}-${chosenColor.id}-${chosenEdition}`
 

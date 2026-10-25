@@ -1,6 +1,15 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { Brand, Category, Product } from '@/types'
+import { ApiError } from '@/lib/api/client'
+import {
+  fetchCatalogBrands,
+  fetchCatalogCategories,
+  fetchCatalogProducts,
+  PaginationMetaDto,
+  ProductSortOption,
+} from '@/lib/api/catalog'
 import { useStore } from '@/lib/store/useStore'
 
 export interface ProductFilterOptions {
@@ -12,93 +21,189 @@ export interface ProductFilterOptions {
   search?: string
   onlyInStock?: boolean
   onlyOnSale?: boolean
-  sortBy?: 'featured' | 'newest' | 'price-asc' | 'price-desc' | 'rating'
+  isFeatured?: boolean
+  isNew?: boolean
+  sortBy?: ProductSortOption
+  page?: number
+  pageSize?: number
+}
+
+const EMPTY_META: PaginationMetaDto = {
+  total: 0,
+  page: 1,
+  page_size: 20,
+  total_pages: 1,
+  has_next: false,
+  has_prev: false,
+}
+
+function isAbortError(err: unknown): boolean {
+  return Boolean(
+    err &&
+      typeof err === 'object' &&
+      'name' in err &&
+      (err as { name?: unknown }).name === 'AbortError'
+  )
+}
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message
+  }
+  if (err instanceof Error && err.message) {
+    return err.message
+  }
+  return 'Failed to load catalog data'
 }
 
 export function useProducts(filters: ProductFilterOptions = {}) {
-  const products = useStore((s) => s.products)
+  const upsertCatalogProducts = useStore((s) => s.upsertCatalogProducts)
 
-  const filtered = useMemo(() => {
-    let list = [...products]
+  const [products, setProducts] = useState<Product[]>([])
+  const [meta, setMeta] = useState<PaginationMetaDto>(EMPTY_META)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadTick, setReloadTick] = useState<number>(0)
 
-    if (filters.categorySlug && filters.categorySlug !== 'all') {
-      list = list.filter((p) => p.category.slug === filters.categorySlug)
+  const brandKey = (filters.brandSlugs || []).join(',')
+
+  const reload = useCallback(() => {
+    setReloadTick((v) => v + 1)
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setIsLoading(true)
+    setError(null)
+
+    const brandList = brandKey ? brandKey.split(',').filter(Boolean) : undefined
+
+    fetchCatalogProducts(
+      {
+        categorySlug: filters.categorySlug,
+        brandSlugs: brandList,
+        color: filters.colorId,
+        minPrice: filters.minPrice,
+        maxPrice: filters.maxPrice,
+        search: filters.search,
+        inStock: filters.onlyInStock ? true : undefined,
+        isOnSale: filters.onlyOnSale ? true : undefined,
+        isFeatured: filters.isFeatured,
+        isNew: filters.isNew,
+        sortBy: filters.sortBy,
+        page: filters.page ?? 1,
+        pageSize: filters.pageSize ?? 20,
+      },
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (controller.signal.aborted) return
+        setProducts(res.items)
+        setMeta(res.meta)
+        upsertCatalogProducts(res.items)
+        setIsLoading(false)
+      })
+      .catch((err: unknown) => {
+        if (isAbortError(err) || controller.signal.aborted) return
+        setProducts([])
+        setMeta(EMPTY_META)
+        setError(toErrorMessage(err))
+        setIsLoading(false)
+      })
+
+    return () => {
+      controller.abort()
     }
-
-    if (filters.brandSlugs && filters.brandSlugs.length > 0) {
-      list = list.filter((p) => filters.brandSlugs!.includes(p.brand.slug))
-    }
-
-    if (filters.colorId) {
-      list = list.filter((p) =>
-        p.colors.some((c) => c.id.includes(filters.colorId!) || c.accentHex === filters.colorId)
-      )
-    }
-
-    if (typeof filters.minPrice === 'number') {
-      list = list.filter((p) => p.price >= filters.minPrice!)
-    }
-
-    if (typeof filters.maxPrice === 'number') {
-      list = list.filter((p) => p.price <= filters.maxPrice!)
-    }
-
-    if (filters.onlyInStock) {
-      list = list.filter((p) => p.stock_quantity > 0)
-    }
-
-    if (filters.onlyOnSale) {
-      list = list.filter((p) => Boolean(p.compare_price && p.compare_price > p.price))
-    }
-
-    if (filters.search && filters.search.trim()) {
-      const q = filters.search.trim().toLowerCase()
-      list = list.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.name_fa.toLowerCase().includes(q) ||
-          p.subtitle.toLowerCase().includes(q) ||
-          p.subtitle_fa.toLowerCase().includes(q) ||
-          p.brand.name.toLowerCase().includes(q) ||
-          p.brand.name_fa.toLowerCase().includes(q) ||
-          p.category.name_fa.toLowerCase().includes(q)
-      )
-    }
-
-    switch (filters.sortBy) {
-      case 'price-asc':
-        list.sort((a, b) => a.price - b.price)
-        break
-      case 'price-desc':
-        list.sort((a, b) => b.price - a.price)
-        break
-      case 'rating':
-        list.sort((a, b) => b.rating_avg - a.rating_avg)
-        break
-      case 'newest':
-        list.sort((a, b) => Number(Boolean(b.is_new)) - Number(Boolean(a.is_new)) || b.id - a.id)
-        break
-      case 'featured':
-      default:
-        list.sort((a, b) => Number(Boolean(b.is_featured)) - Number(Boolean(a.is_featured)))
-        break
-    }
-
-    return list
   }, [
-    products,
     filters.categorySlug,
-    filters.brandSlugs,
+    brandKey,
     filters.colorId,
     filters.minPrice,
     filters.maxPrice,
+    filters.search,
     filters.onlyInStock,
     filters.onlyOnSale,
-    filters.search,
+    filters.isFeatured,
+    filters.isNew,
     filters.sortBy,
+    filters.page,
+    filters.pageSize,
+    reloadTick,
+    upsertCatalogProducts,
   ])
 
-  return { products: filtered, total: filtered.length, allProducts: products }
+  return {
+    products,
+    meta,
+    total: meta.total,
+    isLoading,
+    error,
+    reload,
+  }
+}
+
+export function useCatalogCategories() {
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback((forceRefresh = false) => {
+    setIsLoading(true)
+    setError(null)
+    fetchCatalogCategories(forceRefresh)
+      .then((items) => {
+        setCategories(items)
+        setIsLoading(false)
+      })
+      .catch((err: unknown) => {
+        if (isAbortError(err)) return
+        setCategories([])
+        setError(toErrorMessage(err))
+        setIsLoading(false)
+      })
+  }, [])
+
+  useEffect(() => {
+    load(false)
+  }, [load])
+
+  const reload = useCallback(() => {
+    load(true)
+  }, [load])
+
+  return { categories, isLoading, error, reload }
+}
+
+export function useCatalogBrands() {
+  const [brands, setBrands] = useState<Brand[]>([])
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback((forceRefresh = false) => {
+    setIsLoading(true)
+    setError(null)
+    fetchCatalogBrands(forceRefresh)
+      .then((items) => {
+        setBrands(items)
+        setIsLoading(false)
+      })
+      .catch((err: unknown) => {
+        if (isAbortError(err)) return
+        setBrands([])
+        setError(toErrorMessage(err))
+        setIsLoading(false)
+      })
+  }, [])
+
+  useEffect(() => {
+    load(false)
+  }, [load])
+
+  const reload = useCallback(() => {
+    load(true)
+  }, [load])
+
+  return { brands, isLoading, error, reload }
 }
 
 export default useProducts

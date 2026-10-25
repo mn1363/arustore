@@ -9,12 +9,14 @@ from app.models.category import Category
 from app.models.product import Product
 from app.models.user import User
 from app.schemas.common import CategoryCreate, CategoryResponse
+from app.services.product_service import LEGACY_CATEGORY_SLUG_ALIASES
 from app.utils.slugify import ensure_unique_slug, generate_slug
 
 router = APIRouter()
 
 
 @router.get("/", response_model=List[CategoryResponse])
+@router.get("", response_model=List[CategoryResponse], include_in_schema=False)
 async def list_categories(
     db: AsyncSession = Depends(get_db),
 ) -> List[CategoryResponse]:
@@ -61,7 +63,8 @@ async def get_category(
     if identifier.isdigit():
         stmt = stmt.where(Category.id == int(identifier))
     else:
-        stmt = stmt.where(Category.slug == identifier)
+        resolved_slug = LEGACY_CATEGORY_SLUG_ALIASES.get(identifier, identifier)
+        stmt = stmt.where(Category.slug.in_(list({identifier, resolved_slug})))
     cat = (await db.execute(stmt)).scalar_one_or_none()
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")

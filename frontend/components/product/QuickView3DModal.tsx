@@ -5,6 +5,10 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { Layers, ShoppingBag, ArrowUpLeft, ArrowUpRight } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
+import {
+  getProductPrimaryFinish,
+  isProductAvailable,
+} from '@/lib/data/catalog'
 import { useStore } from '@/lib/store/useStore'
 import {
   formatPrice,
@@ -29,7 +33,8 @@ export default function QuickView3DModal() {
 
   if (!product) return null
 
-  const activeColor = product.colors[colorIdx] || product.colors[0]
+  const activeColor = getProductPrimaryFinish(product, colorIdx)
+  const available = isProductAvailable(product)
 
   return (
     <Modal
@@ -82,40 +87,50 @@ export default function QuickView3DModal() {
               {getProductDescription(product, locale)}
             </p>
 
-            <div className="space-y-2 pt-1">
-              <div className="text-xs text-[#979fb2]">
-                {locale === 'fa' ? activeColor.name_fa : activeColor.name}
+            {product.colors.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <div className="text-xs text-[#979fb2]">
+                  {locale === 'fa' ? activeColor.name_fa : activeColor.name}
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {product.colors.map((c, idx) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setColorIdx(idx)}
+                      aria-label={locale === 'fa' ? c.name_fa : c.name}
+                      className={`w-6 h-6 rounded-full border transition-all ${
+                        colorIdx === idx
+                          ? 'scale-110 border-white shadow-[0_0_8px_rgba(223,192,142,0.5)]'
+                          : 'border-white/25 opacity-70 hover:opacity-100'
+                      }`}
+                      style={{
+                        background: `linear-gradient(135deg, ${c.hex} 45%, ${c.accentHex} 100%)`,
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                {product.colors.map((c, idx) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setColorIdx(idx)}
-                    aria-label={locale === 'fa' ? c.name_fa : c.name}
-                    className={`w-6 h-6 rounded-full border transition-all ${
-                      colorIdx === idx
-                        ? 'scale-110 border-white shadow-[0_0_8px_rgba(223,192,142,0.5)]'
-                        : 'border-white/25 opacity-70 hover:opacity-100'
-                    }`}
-                    style={{
-                      background: `linear-gradient(135deg, ${c.hex} 45%, ${c.accentHex} 100%)`,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="space-y-2.5 pt-4 border-t border-white/[0.08]">
             <button
               onClick={() => {
+                if (!available) return
                 addToCart(product, 1, activeColor)
                 setQuickViewProduct(null)
               }}
-              className="w-full py-3 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2"
+              disabled={!available}
+              className="w-full py-3 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ShoppingBag className="w-4 h-4" />
-              <span>{dict.common.addToCart}</span>
+              <span>
+                {available
+                  ? dict.common.addToCart
+                  : locale === 'fa'
+                  ? 'ناموجود در انبار'
+                  : 'Out of Stock'}
+              </span>
             </button>
 
             <Link

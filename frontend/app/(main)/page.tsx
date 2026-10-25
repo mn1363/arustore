@@ -1,12 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Box, ShieldCheck } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRight, Box, ShieldCheck } from 'lucide-react'
 import HeroStage3D from '@/components/three/HeroStage3D'
 import ProductCard from '@/components/product/ProductCard'
 import Card3DTilt from '@/components/ui/Card3DTilt'
-import { CATEGORIES } from '@/lib/data/catalog'
+import LoadingSkeleton from '@/components/common/LoadingSkeleton'
+import { Product } from '@/types'
+import { fetchCatalogProducts } from '@/lib/api/catalog'
+import { useCatalogCategories } from '@/hooks/useProducts'
 import { getDict } from '@/lib/data/i18n'
 import { useStore } from '@/lib/store/useStore'
 import { formatNumber } from '@/lib/utils'
@@ -38,19 +41,115 @@ const CATEGORY_REALM_STYLES = [
   },
 ]
 
+type HomeCollectionTab = 'all' | 'featured' | 'new'
+
 export default function HomePage() {
   const locale = useStore((s) => s.locale)
-  const products = useStore((s) => s.products)
+  const upsertCatalogProducts = useStore((s) => s.upsertCatalogProducts)
   const dict = getDict(locale)
 
-  const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'new'>('all')
+  const [activeTab, setActiveTab] = useState<HomeCollectionTab>('all')
+  const [heroCatalog, setHeroCatalog] = useState<Product[]>([])
+  const [tabCache, setTabCache] = useState<Partial<Record<HomeCollectionTab, Product[]>>>({})
+  const [productsLoading, setProductsLoading] = useState<boolean>(true)
+  const [tabLoading, setTabLoading] = useState<boolean>(false)
+  const [productsError, setProductsError] = useState<string | null>(null)
+  const [reloadTick, setReloadTick] = useState<number>(0)
 
-  const filteredProducts = products.filter((p) => {
-    if (activeTab === 'featured') return p.is_featured
-    if (activeTab === 'new') return p.is_new
-    return true
-  })
+  const {
+    categories,
+    isLoading: categoriesLoading,
+    error: categoriesError,
+    reload: reloadCategories,
+  } = useCatalogCategories()
 
+  const reloadProducts = useCallback(() => {
+    setTabCache({})
+    setReloadTick((v) => v + 1)
+  }, [])
+
+  // Initial load fetches the primary catalog page once, hydrating both HeroStage3D and the 'all' tab.
+  useEffect(() => {
+    const controller = new AbortController()
+    setProductsLoading(true)
+    setProductsError(null)
+
+    fetchCatalogProducts(
+      { page: 1, pageSize: 12, sortBy: 'featured' },
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (controller.signal.aborted) return
+        setHeroCatalog(res.items)
+        setTabCache((prev) => ({ ...prev, all: res.items }))
+        upsertCatalogProducts(res.items)
+        setProductsLoading(false)
+      })
+      .catch((err: unknown) => {
+        if (
+          controller.signal.aborted ||
+          (err &&
+            typeof err === 'object' &&
+            'name' in err &&
+            (err as { name?: unknown }).name === 'AbortError')
+        ) {
+          return
+        }
+        setHeroCatalog([])
+        setProductsError(
+          err instanceof Error ? err.message : 'Unable to load products'
+        )
+        setProductsLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [reloadTick, upsertCatalogProducts])
+
+  // Server-backed tab queries for 'featured' and 'new' (cached per tab to prevent repeated requests).
+  useEffect(() => {
+    if (activeTab === 'all' || tabCache[activeTab]) return
+
+    const controller = new AbortController()
+    setTabLoading(true)
+    setProductsError(null)
+
+    const query =
+      activeTab === 'featured'
+        ? { isFeatured: true, sortBy: 'featured' as const, page: 1, pageSize: 8 }
+        : { isNew: true, sortBy: 'newest' as const, page: 1, pageSize: 8 }
+
+    fetchCatalogProducts(query, { signal: controller.signal })
+      .then((res) => {
+        if (controller.signal.aborted) return
+        setTabCache((prev) => ({ ...prev, [activeTab]: res.items }))
+        upsertCatalogProducts(res.items)
+        setTabLoading(false)
+      })
+      .catch((err: unknown) => {
+        if (
+          controller.signal.aborted ||
+          (err &&
+            typeof err === 'object' &&
+            'name' in err &&
+            (err as { name?: unknown }).name === 'AbortError')
+        ) {
+          return
+        }
+        setProductsError(
+          err instanceof Error ? err.message : 'Unable to load products'
+        )
+        setTabLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [activeTab, tabCache, upsertCatalogProducts])
+
+  const displayedProducts = tabCache[activeTab] || []
+  const isCollectionLoading = productsLoading || tabLoading
   const DirArrow = locale === 'fa' ? ArrowLeft : ArrowRight
 
   return (
@@ -98,7 +197,9 @@ export default function HomePage() {
                   href="/products"
                   className="px-6 py-3.5 rounded-xl champagne-btn font-bold text-sm flex items-center gap-2"
                 >
-                  <span>{locale === 'fa' ? 'مشاهده محصولات' : 'Browse Collection'}</span>
+                  <span>
+                    {locale === 'fa' ? 'مشاهده محصولات' : 'Browse Collection'}
+                  </span>
                   <DirArrow className="w-4 h-4" />
                 </Link>
 
@@ -121,7 +222,12 @@ export default function HomePage() {
             </div>
 
             <div className="lg:col-span-7">
-              <HeroStage3D />
+              <HeroStage3D
+                products={heroCatalog}
+                isLoading={productsLoading}
+                error={productsError}
+                onRetry={reloadProducts}
+              />
             </div>
           </div>
         </div>
@@ -151,7 +257,7 @@ export default function HomePage() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                  onClick={() => setActiveTab(tab.id as HomeCollectionTab)}
                   className={`px-4 py-1.5 rounded-xl text-xs sm:text-sm transition-all ${
                     active
                       ? 'bg-[#1c2233] text-[#dfc08e] font-bold border border-[#dfc08e]/30 shadow-sm'
@@ -165,11 +271,39 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        {isCollectionLoading ? (
+          <LoadingSkeleton count={4} />
+        ) : productsError ? (
+          <div className="rounded-3xl surface-level-1 p-10 text-center space-y-4">
+            <AlertCircle className="w-8 h-8 text-[#dfc08e] mx-auto" />
+            <p className="text-sm sm:text-base font-bold text-[#f4f4f6]">
+              {locale === 'fa'
+                ? 'خطا در دریافت محصولات از سرور'
+                : 'Unable to load products from server'}
+            </p>
+            <button
+              type="button"
+              onClick={reloadProducts}
+              className="px-5 py-2.5 rounded-xl champagne-btn font-bold text-xs"
+            >
+              {locale === 'fa' ? 'تلاش مجدد' : 'Retry'}
+            </button>
+          </div>
+        ) : displayedProducts.length === 0 ? (
+          <div className="rounded-3xl surface-level-1 p-10 text-center">
+            <p className="text-sm sm:text-base font-bold text-[#f4f4f6]">
+              {locale === 'fa'
+                ? 'محصولی در این بخش یافت نشد'
+                : 'No products found in this section'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {displayedProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* 3. ELEVATED FORGING & MATERIAL SANCTUARY */}
@@ -179,7 +313,8 @@ export default function HomePage() {
             aria-hidden="true"
             className="pointer-events-none absolute -top-28 end-10 w-80 h-80 rounded-full blur-3xl opacity-30"
             style={{
-              background: 'radial-gradient(circle, rgba(223,192,142,0.35), transparent 70%)',
+              background:
+                'radial-gradient(circle, rgba(223,192,142,0.35), transparent 70%)',
             }}
           />
 
@@ -257,56 +392,102 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {CATEGORIES.map((cat, idx) => {
-            const realm = CATEGORY_REALM_STYLES[idx % CATEGORY_REALM_STYLES.length]
-            return (
-              <Card3DTilt key={cat.id} maxTilt={4.5} className="rounded-3xl h-full">
-                <Link
-                  href={`/products?category=${cat.slug}`}
-                  className={`group relative rounded-3xl card-level-2 ${realm.borderHover} overflow-hidden flex flex-col justify-between h-full block`}
+        {categoriesLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="rounded-3xl card-level-2 overflow-hidden animate-pulse"
+              >
+                <div className="aspect-[16/11] bg-white/[0.04]" />
+                <div className="p-5 space-y-2 border-t border-white/[0.06]">
+                  <div className="h-4 w-2/3 rounded bg-white/10" />
+                  <div className="h-3 w-1/3 rounded bg-white/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : categoriesError ? (
+          <div className="rounded-3xl surface-level-1 p-10 text-center space-y-4">
+            <AlertCircle className="w-8 h-8 text-[#dfc08e] mx-auto" />
+            <p className="text-sm sm:text-base font-bold text-[#f4f4f6]">
+              {locale === 'fa'
+                ? 'خطا در دریافت تالارهای موضوعی'
+                : 'Unable to load collection portals'}
+            </p>
+            <button
+              type="button"
+              onClick={reloadCategories}
+              className="px-5 py-2.5 rounded-xl champagne-btn font-bold text-xs"
+            >
+              {locale === 'fa' ? 'تلاش مجدد' : 'Retry'}
+            </button>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="rounded-3xl surface-level-1 p-10 text-center">
+            <p className="text-sm sm:text-base font-bold text-[#f4f4f6]">
+              {locale === 'fa'
+                ? 'هنوز مجموعه‌ای ثبت نشده است'
+                : 'No collections available'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {categories.map((cat, idx) => {
+              const realm =
+                CATEGORY_REALM_STYLES[idx % CATEGORY_REALM_STYLES.length]
+              return (
+                <Card3DTilt
+                  key={cat.id}
+                  maxTilt={4.5}
+                  className="rounded-3xl h-full"
                 >
-                  {/* Miniature Dimensional Portal Stage */}
-                  <div className="relative aspect-[16/11] overflow-hidden product-pedestal-stage">
-                    <img
-                      src={cat.image}
-                      alt={cat.name_fa}
-                      loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
-                    />
+                  <Link
+                    href={`/products?category=${cat.slug}`}
+                    className={`group relative rounded-3xl card-level-2 ${realm.borderHover} overflow-hidden flex flex-col justify-between h-full block`}
+                  >
+                    {/* Miniature Dimensional Portal Stage */}
+                    <div className="relative aspect-[16/11] overflow-hidden product-pedestal-stage">
+                      <img
+                        src={cat.image}
+                        alt={cat.name_fa}
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+                      />
 
-                    {/* Portal Arch & Atmospheric Halo */}
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0"
-                      style={{
-                        background: `radial-gradient(80% 65% at 50% 100%, ${realm.halo} 0%, transparent 70%)`,
-                      }}
-                    />
-                    <div className="absolute top-3 start-3 px-2.5 py-1 rounded-full glass-pill text-[11px] font-medium text-[#e8ebf2]">
-                      {locale === 'fa' ? realm.badgeFa : realm.badgeEn}
+                      {/* Portal Arch & Atmospheric Halo */}
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0"
+                        style={{
+                          background: `radial-gradient(80% 65% at 50% 100%, ${realm.halo} 0%, transparent 70%)`,
+                        }}
+                      />
+                      <div className="absolute top-3 start-3 px-2.5 py-1 rounded-full glass-pill text-[11px] font-medium text-[#e8ebf2]">
+                        {locale === 'fa' ? realm.badgeFa : realm.badgeEn}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="p-4 sm:p-5 flex items-center justify-between gap-2 border-t border-white/[0.06]">
-                    <div>
-                      <h3 className="text-sm sm:text-base font-bold text-[#f4f4f6] group-hover:text-[#dfc08e] transition-colors">
-                        {locale === 'fa' ? cat.name_fa : cat.name}
-                      </h3>
-                      <span className="text-[11px] text-[#979fb2] mt-0.5 block">
-                        {formatNumber(cat.product_count, locale)}{' '}
-                        {locale === 'fa' ? 'اثر' : 'pieces'}
+                    <div className="p-4 sm:p-5 flex items-center justify-between gap-2 border-t border-white/[0.06]">
+                      <div>
+                        <h3 className="text-sm sm:text-base font-bold text-[#f4f4f6] group-hover:text-[#dfc08e] transition-colors">
+                          {locale === 'fa' ? cat.name_fa : cat.name}
+                        </h3>
+                        <span className="text-[11px] text-[#979fb2] mt-0.5 block">
+                          {formatNumber(cat.product_count, locale)}{' '}
+                          {locale === 'fa' ? 'اثر' : 'pieces'}
+                        </span>
+                      </div>
+                      <span className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[#979fb2] group-hover:text-[#dfc08e] group-hover:border-[#dfc08e]/35 transition-colors flex-shrink-0">
+                        <DirArrow className="w-4 h-4" />
                       </span>
                     </div>
-                    <span className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-[#979fb2] group-hover:text-[#dfc08e] group-hover:border-[#dfc08e]/35 transition-colors flex-shrink-0">
-                      <DirArrow className="w-4 h-4" />
-                    </span>
-                  </div>
-                </Link>
-              </Card3DTilt>
-            )
-          })}
-        </div>
+                  </Link>
+                </Card3DTilt>
+              )
+            })}
+          </div>
+        )}
       </section>
     </div>
   )

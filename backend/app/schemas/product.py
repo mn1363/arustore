@@ -18,12 +18,15 @@ class ProductFilter(BaseModel):
     category_slug: Optional[str] = None
     brand_id: Optional[int] = None
     brand_slug: Optional[str] = None
+    brand_slugs: Optional[List[str]] = None
+    color: Optional[str] = None
     min_price: Optional[float] = None
     max_price: Optional[float] = None
     search: Optional[str] = None
     in_stock: Optional[bool] = None
     is_on_sale: Optional[bool] = None
     is_featured: Optional[bool] = None
+    is_new: Optional[bool] = None
     sort_by: str = "newest"
 
 

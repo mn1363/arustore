@@ -10,9 +10,14 @@ const nextConfig = {
   },
   reactStrictMode: true,
   swcMinify: true,
+  skipTrailingSlashRedirect: true,
   async rewrites() {
     return {
       fallback: [
+        {
+          source: '/api/v1/:path*/',
+          destination: `${backendInternalUrl}/api/v1/:path*/`,
+        },
         {
           source: '/api/v1/:path*',
           destination: `${backendInternalUrl}/api/v1/:path*`,

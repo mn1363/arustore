@@ -1,566 +1,205 @@
-import { Brand, Category, Product } from '@/types'
+import { Model3DArchetype, Product, ProductColorOption } from '@/types'
 
-export const BRANDS: Brand[] = [
-  {
-    id: 1,
-    name: 'AruMetal Atelier',
-    name_fa: 'کارگاه هنری آرو متال',
-    slug: 'arumetal-atelier',
-    tagline: 'Hand-Polished Pure Cast Aluminum',
-    tagline_fa: 'ریخته‌گری شمش آلومینیوم خالص و پرداخت آینه‌ای دست‌ساز',
-    product_count: 3,
-  },
-  {
-    id: 2,
-    name: 'AruAnodize Royal',
-    name_fa: 'آرو آنودایز رویال',
-    slug: 'aruanodize-royal',
-    tagline: 'Colorfast Champagne & Bronze Anodizing',
-    tagline_fa: 'پوشش آنودایز کوره‌ای شامپاینی و برنزی ۱۰۰٪ رنگ‌ثابت',
-    product_count: 2,
-  },
-  {
-    id: 3,
-    name: 'AruForm CNC',
-    name_fa: 'آرو فرم مدرن (CNC)',
-    slug: 'aruform-cnc',
-    tagline: 'Architectural CNC & Fluted Metalwork',
-    tagline_fa: 'طراحی معماری مدرن و تراش دقیق CNC آلومینیوم',
-    product_count: 2,
-  },
-  {
-    id: 4,
-    name: 'AruBridal Heritage',
-    name_fa: 'کلکسیون جهیزیه و تشریفات آرو',
-    slug: 'arubridal-heritage',
-    tagline: 'Coordinated Bridal & Hospitality Sets',
-    tagline_fa: 'سرویس‌های هماهنگ پذیرایی، تشریفات و جهیزیه لوکس',
-    product_count: 1,
-  },
-]
+/**
+ * Purely visual 3D/archetype presentation metadata and non-destructive URL
+ * compatibility aliases. Commercial product, category, brand, price, and stock
+ * data are fetched exclusively from the FastAPI `/api/v1` backend.
+ */
 
-export const CATEGORIES: Category[] = [
-  {
-    id: 1,
-    name: 'Pastry Stands & Fruit Bowls',
-    name_fa: 'شیرینی‌خوری طبقاتی و میوه‌خوری',
-    slug: 'stands-fruit-bowls',
-    description: '3-tier cast aluminum sweet stands & fluted pedestal fruit bowls',
-    description_fa: 'شیرینی‌خوری‌های دو و سه‌طبقه و میوه‌خوری‌های پایه‌دار ریخته‌گری آلومینیوم',
-    icon: 'Layers',
-    gradient: 'from-amber-500/25 via-slate-300/10 to-transparent',
-    accent: '#f59e0b',
-    image: '/images/products/tiered-stand.png',
+export const VALID_MODEL_ARCHETYPES: readonly Model3DArchetype[] = [
+  'tiered-stand',
+  'fruit-bowl',
+  'serving-tray',
+  'nut-dish',
+  'ordu-platter',
+  'tea-set',
+  'candelabra',
+  'kashkool-vessel',
+] as const
+
+export function normalizeModelArchetype(raw?: string | null): Model3DArchetype {
+  if (
+    raw &&
+    (VALID_MODEL_ARCHETYPES as readonly string[]).includes(raw)
+  ) {
+    return raw as Model3DArchetype
+  }
+  return 'fruit-bowl'
+}
+
+export const DEFAULT_ALUMINUM_FINISH: ProductColorOption = {
+  id: 'default-silver-champagne',
+  name: 'Satin Silver & Champagne Gold',
+  name_fa: 'سیلور ساتن و طلایی شامپاینی',
+  hex: '#d8dee9',
+  accentHex: '#d6b88a',
+}
+
+export function getProductPrimaryFinish(
+  product: Pick<Product, 'colors'>,
+  index = 0
+): ProductColorOption {
+  return product.colors[index] || product.colors[0] || DEFAULT_ALUMINUM_FINISH
+}
+
+export function isProductAvailable(
+  product: Pick<Product, 'in_stock' | 'stock_quantity'>
+): boolean {
+  if (product.in_stock === false) return false
+  return product.stock_quantity > 0
+}
+
+export const ACCENT_TOKEN_TO_HEX: Record<string, string> = {
+  gold: '#fbbf24',
+  silver: '#e2e8f0',
+  amber: '#f59e0b',
+  bronze: '#d97706',
+  champagne: '#dfc08e',
+}
+
+export function resolveAccentHex(raw?: string | null, fallback = '#dfc08e'): string {
+  if (!raw || !raw.trim()) return fallback
+  const trimmed = raw.trim()
+  if (trimmed.startsWith('#')) return trimmed
+  return ACCENT_TOKEN_TO_HEX[trimmed.toLowerCase()] || fallback
+}
+
+export const ARCHETYPE_ACCENT_HEX: Record<Model3DArchetype, string> = {
+  'tiered-stand': '#fbbf24',
+  'fruit-bowl': '#e2e8f0',
+  'serving-tray': '#f59e0b',
+  'nut-dish': '#eab308',
+  'ordu-platter': '#d97706',
+  'tea-set': '#cbd5e1',
+  candelabra: '#fbbf24',
+  'kashkool-vessel': '#f59e0b',
+}
+
+export interface CategoryVisualPresentation {
+  archetype: Model3DArchetype
+  icon: string
+  gradient: string
+  defaultAccent: string
+  defaultImage: string
+}
+
+export const CATEGORY_PRESENTATION_BY_SLUG: Record<
+  string,
+  CategoryVisualPresentation
+> = {
+  'pastry-stands': {
     archetype: 'tiered-stand',
-    product_count: 2,
-  },
-  {
-    id: 2,
-    name: 'Serving Trays & Tea Service',
-    name_fa: 'سینی پذیرایی و سرویس چای‌خوری',
-    slug: 'trays-tea-sets',
-    description: 'Engraved heavy-gauge aluminum trays, sugar bowls & filigree tea sets',
-    description_fa: 'سینی‌های دسته‌دار قلم‌زنی و CNC، قندان و ست چای‌خوری آلومینیومی رنگ‌ثابت',
-    icon: 'Sparkles',
-    gradient: 'from-slate-200/20 via-amber-400/10 to-transparent',
-    accent: '#e2e8f0',
-    image: '/images/products/tea-set.png',
-    archetype: 'serving-tray',
-    product_count: 2,
-  },
-  {
-    id: 3,
-    name: 'Nut Bonbonnieres & Ordu Sets',
-    name_fa: 'آجیل‌خوری، شکلات‌خوری و اردوخوری',
-    slug: 'nut-ordu-dishes',
-    description: 'Hammered lidded aluminum candy dishes & multi-bowl relish platters',
-    description_fa: 'شکلات‌خوری و آجیل‌خوری درب‌دار چکش‌کاری و اردوخوری‌های چندخانه مدرن',
     icon: 'Crown',
-    gradient: 'from-yellow-500/25 via-orange-500/10 to-transparent',
-    accent: '#eab308',
-    image: '/images/products/nut-dish.png',
-    archetype: 'nut-dish',
-    product_count: 2,
+    gradient: 'from-amber-400/20 via-slate-300/10 to-transparent',
+    defaultAccent: '#fbbf24',
+    defaultImage: '/images/categories/pastry-stands.png',
   },
-  {
-    id: 4,
-    name: 'Candelabras & Kashkool Centerpieces',
-    name_fa: 'شمعدان و کشکول دکوراتیو میز',
-    slug: 'candelabra-centerpieces',
-    description: 'Sculptural 3-arm cast aluminum candelabras & modern wave kashkools',
-    description_fa: 'شمعدان‌های سه‌شاخه تشریفاتی و کشکول‌های موجی مدرن از آلومینیوم توپر',
-    icon: 'Flame',
-    gradient: 'from-orange-400/20 via-amber-500/10 to-transparent',
-    accent: '#fbbf24',
-    image: '/images/products/kashkool-vessel.png',
-    archetype: 'kashkool-vessel',
-    product_count: 2,
-  },
-]
-
-export const PRODUCTS: Product[] = [
-  {
-    id: 1,
-    name: 'Royal 3-Tier Aluminum Pastry Stand',
-    name_fa: 'شیرینی‌خوری سه‌طبقه آلومینیومی مدل رویال',
-    slug: 'royal-3tier-aluminum-stand',
-    subtitle: 'Pure Cast & Spun Aluminum with Champagne-Gold Ring Finial',
-    subtitle_fa: 'تولیدشده از شمش آلومینیوم خالص پرداخت ساتن با حلقه دستگیره طلایی شامپاینی',
-    description:
-      'Hand-finished in our metalwork atelier from food-grade 6061 & die-cast pure aluminum. Features three graduated scalloped platters, precision-threaded solid central pillars, and a kiln-baked protective clearcoat that never tarnishes.',
-    description_fa:
-      'شاهکار کارگاه تولیدی آرو استور از شمش آلومینیوم خالص بهداشتی با سه بشقاب لبه‌کنگره‌ای در ابعاد استاندارد، ستون مرکزی توپر تراش‌خورده و دستگیره حلقه‌ای با آبکاری شامپاینی کوره‌ای. صددرصد رنگ‌ثابت، ضدخش و قابل باز و بسته شدن آسان برای شستشو و چیدمان.',
-    price: 89,
-    compare_price: 109,
-    price_toman: 4850000,
-    compare_price_toman: 5900000,
-    stock_quantity: 26,
-    rating_avg: 4.95,
-    rating_count: 342,
-    is_featured: true,
-    is_new: true,
-    badge: 'پرفروش‌ترین تولید کارخانه',
-    badge_fa: 'پرفروش‌ترین تولید کارخانه',
-    archetype: 'tiered-stand',
-    accent_color: '#f59e0b',
-    colors: [
-      { id: 'silver-champagne', name: 'Brushed Silver & Champagne Finial', name_fa: 'سیلور ساتن با تاج طلایی شامپاینی', hex: '#d8dee9', accentHex: '#eab308' },
-      { id: 'full-champagne', name: 'Full Champagne Gold Anodized', name_fa: 'تمام شامپاینی آنودایز کوره‌ای', hex: '#d4af37', accentHex: '#fef08a' },
-      { id: 'antique-bronze', name: 'Antique Patina Bronze', name_fa: 'برنزی آنتیک پتینه‌کاری', hex: '#8c6239', accentHex: '#f59e0b' },
-      { id: 'smoked-titanium', name: 'Smoked Pewter Aluminum', name_fa: 'دودی تیتانیومی مات', hex: '#525b6c', accentHex: '#cbd5e1' },
-    ],
-    editions: [
-      { id: '3-tier', label: '3-Tier Grand Reception (Height 44cm)', label_fa: 'سه‌طبقه تشریفاتی (ارتفاع ۴۴ سانتی‌متر)', priceDelta: 0, priceDeltaToman: 0 },
-      { id: '2-tier', label: '2-Tier Compact Salon + Gift Box', label_fa: 'نسخه ویژه با جعبه مخمل هدیه و جهیزیه', priceDelta: 12, priceDeltaToman: 650000 },
-    ],
-    brand: BRANDS[0],
-    category: CATEGORIES[0],
-    images: [
-      { id: 101, url: '/images/products/tiered-stand.png', alt: 'شیرینی‌خوری سه‌طبقه آلومینیومی رویال', is_primary: true },
-      { id: 102, url: '/images/banners/hero-aluminum-atelier.png', alt: 'آتلیه تولید ظروف آلومینیومی' },
-    ],
-    specs: [
-      { label: 'Alloy Grade', label_fa: 'جنس و آلیاژ بدنه', value: '99.7% Pure Ingot Aluminum', value_fa: 'شمش آلومینیوم خالص ریخته‌گری و ورق ۴ میل' },
-      { label: 'Surface Coating', label_fa: 'پوشش و تثبیت رنگ', value: '220°C Kiln-Baked Anodize', value_fa: 'آنودایز و لاک پلی‌اورتان کوره‌ای ۲۲۰ درجه' },
-      { label: 'Dimensions', label_fa: 'ابعاد طبقات', value: 'Ø 32 / 25 / 19 cm × H 44 cm', value_fa: 'قطر ۳۲، ۲۵ و ۱۹ سانتی‌متر • ارتفاع ۴۴' },
-      { label: 'Net Weight', label_fa: 'وزن خالص فلز', value: '2.15 kg Solid Balance', value_fa: '۲۱۵۰ گرم با تعادل ایستایی فوق‌العاده' },
-    ],
-    highlights: [
-      '100% tarnish-free, rust-proof & food-safe anodized aluminum',
-      'Detachable modular tiers for effortless storage & washing',
-      'Direct factory warranty with 5-year color stability guarantee',
-    ],
-    highlights_fa: [
-      'صددرصد رنگ‌ثابت، ضدزنگ و مقاوم در برابر اسید میوه و شستشو',
-      'طراحی ماژولار پیچی توپر با قابلیت باز شدن طبقات در ۳۰ ثانیه',
-      'عرضه مستقیم از کارخانه آرو استور با ۵ سال ضمانت کتبی ثبات رنگ',
-    ],
-    reviews: [
-      {
-        id: 1,
-        user_name: 'مهتاب رضایی',
-        rating: 5,
-        title: 'Stunning centerpiece for my bridal set!',
-        title_fa: 'فوق‌العاده شیک برای سرویس پذیرایی جهیزیه!',
-        comment: 'Heavy, balanced, and the brushed silver with gold handle looks like Italian luxury.',
-        comment_fa: 'وزن و ایستایی ظرف عالیه، پرداخت آلومینیومش دقیقاً مثل برندهای لوکس ایتالیایی می‌درخشه و اصلاً لک دست روش نمی‌مونه.',
-        created_at: '2026-10-14',
-        verified: true,
-      },
-      {
-        id: 2,
-        user_name: 'فرهاد کاظمی (گالری خانه نقره‌ای)',
-        rating: 5,
-        title: 'Top manufacturing precision',
-        title_fa: 'کیفیت ریخته‌گری و پرداخت بی‌رقیب در بازار',
-        comment: 'Ordered 10 units for our showroom. Zero casting flaws.',
-        comment_fa: 'برای شوروم فروشگاه سفارش دادیم؛ تمیزی تراش لبه‌ها و رزوه ستون وسط واقعاً درجه یک و صادراتیه.',
-        created_at: '2026-10-19',
-        verified: true,
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: 'lotus Fluted Pedestal Aluminum Fruit Bowl',
-    name_fa: 'میوه‌خوری پایه‌دار آلومینیومی مدل لوتوس شیاردار',
-    slug: 'lotus-fluted-aluminum-fruit-bowl',
-    subtitle: 'CNC-Fluted Exterior & Mirror-Buffed Interior Cast Aluminum',
-    subtitle_fa: 'بدنه شیاردار تراش CNC با داخل آینه‌ای و طوق شامپاینی-برنزی',
-    description:
-      'Architectural geometry meets traditional hospitality. Precision radial flutes catch ambient chandelier light across the outer aluminum cone while the heavy faceted base anchors any dining table.',
-    description_fa:
-      'تلفیق معماری مدرن و اصالت پذیرایی ایرانی. شیارهای شعاعی دقیق روی بدنه بیرونی آلومینیوم، نور لوستر را به زیبایی بازتاب می‌دهد و کاسه داخلی با پرداخت آینه‌ای و پایه چندوجهی سنگین، شکوهی ماندگار به میز ناهارخوری می‌بخشد.',
-    price: 96,
-    compare_price: 118,
-    price_toman: 5250000,
-    compare_price_toman: 6400000,
-    stock_quantity: 19,
-    rating_avg: 4.94,
-    rating_count: 218,
-    is_featured: true,
-    is_new: true,
-    badge: 'طراحی ثبت‌شده CNC',
-    badge_fa: 'طراحی ثبت‌شده CNC',
+  'fruit-vessels': {
     archetype: 'fruit-bowl',
-    accent_color: '#eab308',
-    colors: [
-      { id: 'silver-bronze-collar', name: 'Satin Silver & Bronze Collar', name_fa: 'سیلور مات با طوق شامپاینی-برنزی', hex: '#d5dce6', accentHex: '#d97706' },
-      { id: 'champagne-gold', name: 'Royal Champagne Gold', name_fa: 'طلایی شامپاینی یکدست', hex: '#d4af37', accentHex: '#fef08a' },
-      { id: 'charcoal-silver', name: 'Charcoal & Mirror Silver', name_fa: 'ذغالی آنودایز و نقره‌ای', hex: '#475569', accentHex: '#e2e8f0' },
-    ],
-    editions: [
-      { id: 'diam-34', label: 'Diameter 34cm (12-Person Reception)', label_fa: 'سایز بزرگ پذیرایی ۱۲ نفره (قطر ۳۴ سانتی‌متر)', priceDelta: 0, priceDeltaToman: 0 },
-      { id: 'diam-40', label: 'Diameter 40cm Grand Hall Edition', label_fa: 'سایز سلطنتی تالاری (قطر ۴۰ سانتی‌متر)', priceDelta: 18, priceDeltaToman: 980000 },
-    ],
-    brand: BRANDS[2],
-    category: CATEGORIES[0],
-    images: [
-      { id: 201, url: '/images/products/fruit-bowl.png', alt: 'میوه‌خوری پایه‌دار آلومینیومی لوتوس', is_primary: true },
-    ],
-    specs: [
-      { label: 'Manufacturing Method', label_fa: 'فرآیند ساخت', value: 'Gravity Die-Cast + 5-Axis CNC', value_fa: 'ریخته‌گری ثقلی شمش + شیارزنی دقیق CNC' },
-      { label: 'Bowl Diameter', label_fa: 'ابعاد دهانه و ارتفاع', value: 'Ø 34 cm × Height 21 cm', value_fa: 'قطر دهانه ۳۴ سانتی‌متر • ارتفاع ۲۱ سانتی‌متر' },
-      { label: 'Wall Thickness', label_fa: 'ضخامت جداره آلومینیوم', value: '5.5 mm Heavy Rim', value_fa: '۵.۵ میلی‌متر توپر ضدضربه و تغییر شکل' },
-      { label: 'Food Safety', label_fa: 'استاندارد بهداشتی', value: 'Lead-Free Food-Safe Alloy', value_fa: 'فاقد سرب و کاملاً مقاوم به رطوبت و اسید میوه' },
-    ],
-    highlights: [
-      'Radial CNC micro-flutes create mesmerizing light & shadow play',
-      'Weighted faceted aluminum pedestal prevents tipping even when full',
-      'Scratch-resistant satin exterior + mirror interior finish',
-    ],
-    highlights_fa: [
-      'شیارهای ظریف سه بعدی که زیر نور پذیرایی درخشش منحصربه‌فردی ایجاد می‌کند',
-      'پایه سنگین چندوجهی برای ایستایی کامل حتی با وزن بالای میوه',
-      'پوشش نانو ضدلک اثر انگشت و شستشوی بسیار آسان بدون تغییر رنگ',
-    ],
-    reviews: [
-      {
-        id: 3,
-        user_name: 'پریسا امیری',
-        rating: 5,
-        title: 'Like a museum sculpture on our dining table',
-        title_fa: 'مثل یک تندیس هنری وسط میز ناهارخوری!',
-        comment: 'Even when empty it looks like an architectural art piece.',
-        comment_fa: 'حتی وقتی خالی روی میز قرار می‌گیره مثل یک اثر هنری دکوراتیو می‌درخشه. کیفیت تراش شیارها فوق‌العاده‌ست.',
-        created_at: '2026-10-17',
-        verified: true,
-      },
-    ],
+    icon: 'Sparkles',
+    gradient: 'from-slate-200/20 via-amber-300/10 to-transparent',
+    defaultAccent: '#e2e8f0',
+    defaultImage: '/images/categories/fruit-vessels.png',
   },
-  {
-    id: 3,
-    name: 'Imperial Engraved Aluminum Serving Tray',
-    name_fa: 'سینی پذیرایی آلومینیومی دسته‌دار مدل امپریال',
-    slug: 'imperial-engraved-aluminum-tray',
-    subtitle: 'Laser/CNC Geometric Engraved Bed & Cast Champagne Handles',
-    subtitle_fa: 'کف برس‌خورده با حکاکی هندسی مدرن و دسته‌های ریخته‌گری طلایی شامپاینی',
-    description:
-      'Crafted from 4.5mm tempered aluminum sheet with a raised spill-guard bezel and ergonomic solid-cast handles. Light enough for effortless serving yet rigid enough to carry 12 full tea glasses without flexing.',
-    description_fa:
-      'ساخته‌شده از ورق آلومینیوم خالص ۴.۵ میلی‌متری با لبه محافظ برجسته، حکاکی هندسی ظریف در حاشیه و دسته‌های ارگونومیک ریخته‌گری‌شده با آبکاری شامپاینی. سبکی مهندسی‌شده آلومینیوم در کنار استحکام بالا، حمل ۱۲ فنجان چای را کاملاً راحت و ایمن می‌کند.',
-    price: 68,
-    compare_price: 84,
-    price_toman: 3690000,
-    compare_price_toman: 4450000,
-    stock_quantity: 34,
-    rating_avg: 4.91,
-    rating_count: 289,
-    is_featured: true,
-    badge: 'ضدخش و نسوز',
-    badge_fa: 'ضدخش و مقاوم به حرارت',
+  'serving-trays': {
     archetype: 'serving-tray',
-    accent_color: '#eab308',
-    colors: [
-      { id: 'satin-silver-gold', name: 'Brushed Silver & Gold Handles', name_fa: 'سیلور خش‌دار با دسته شامپاینی', hex: '#dce2ec', accentHex: '#eab308' },
-      { id: 'mirror-silver', name: 'Full Mirror Silver', name_fa: 'تمام سیلور آینه‌ای', hex: '#e2e8f0', accentHex: '#94a3b8' },
-      { id: 'warm-champagne', name: 'Anodized Champagne Gold', name_fa: 'تمام شامپاینی مات', hex: '#cfb05c', accentHex: '#fef3c7' },
-    ],
-    editions: [
-      { id: 'large-rect', label: 'Large 48×32 cm Reception Tray', label_fa: 'سایز بزرگ مجلسی (۴۸ در ۳۲ سانتی‌متر)', priceDelta: 0, priceDeltaToman: 0 },
-      { id: 'twin-set', label: '2-Piece Set (Large + Medium Tea Tray)', label_fa: 'ست دوتایی (سایز بزرگ مجلسی + متوسط دم‌دستی)', priceDelta: 42, priceDeltaToman: 2250000 },
-    ],
-    brand: BRANDS[1],
-    category: CATEGORIES[1],
-    images: [
-      { id: 301, url: '/images/products/serving-tray.png', alt: 'سینی پذیرایی آلومینیومی امپریال', is_primary: true },
-    ],
-    specs: [
-      { label: 'Tray Dimensions', label_fa: 'ابعاد مفید سینی', value: '48 × 32 cm (54 cm with handles)', value_fa: '۴۸ × ۳۲ سانتی‌متر (۵۴ سانت با دسته‌ها)' },
-      { label: 'Heat Resistance', label_fa: 'مقاومت حرارتی', value: 'Up to 250°C Boiling Teapot Safe', value_fa: 'مقاوم در برابر حرارت قوری و استکان داغ تا ۲۵۰ درجه' },
-      { label: 'Handle Fastening', label_fa: 'اتصال دسته‌ها', value: 'Concealed Stainless Hex Rivets', value_fa: 'پیچ‌های مخفی استیل ضدزنگ از زیر سینی' },
-      { label: 'Weight', label_fa: 'وزن استاندارد', value: '1.35 kg Lightweight Rigid', value_fa: '۱۳۵۰ گرم — خوش‌دست و بدون خمش' },
-    ],
-    highlights: [
-      'Heat-proof anodized surface never clouds from hot tea glasses',
-      'Brushed grain hides water spots and micro-scratches',
-      'Ergonomic cast aluminum handles stay cool to the touch',
-    ],
-    highlights_fa: [
-      'عدم ایجاد هاله یا تغییر رنگ در تماس با استکان و قوری داغ',
-      'بافت ساتن خش‌دار که خط و خش و لکه آب را نشان نمی‌دهد',
-      'دسته‌های خوش‌فرم ریخته‌گری با پیچ‌های مخفی قابل بازبینی',
-    ],
-    reviews: [],
+    icon: 'Layers',
+    gradient: 'from-amber-500/20 via-zinc-300/10 to-transparent',
+    defaultAccent: '#f59e0b',
+    defaultImage: '/images/categories/serving-trays.png',
   },
-  {
-    id: 4,
-    name: 'Zarrin Hammered Aluminum Nut & Candy Dish',
-    name_fa: 'آجیل‌خوری و شکلات‌خوری درب‌دار چکش‌کاری زرین',
-    slug: 'zarrin-hammered-aluminum-nut-dish',
-    subtitle: 'Hand-Hammered Footed Aluminum Goblet with Gold Leaf Finial',
-    subtitle_fa: 'بدنه چکش‌کاری دست‌ساز آلومینیومی با پایه کنگره‌ای و سرپوش برگ طلایی',
-    description:
-      'Every dimple on this footed bonbonniere is hand-planished by master artisans over solid cast aluminum to preserve the freshness and aroma of saffron pistachios, nuts, and artisan chocolates.',
-    description_fa:
-      'هر ضربه چکش روی این آجیل‌خوری و شکلات‌خوری پایه‌دار، هنر دست استادکاران فلزگر آرو استور روی آلومینیوم خالص است. درب گنبدی چفت‌شونده عطر و تازگی آجیل، پسته زعفرانی، گز و شکلات را حفظ کرده و قپه برگ طلایی درخششی اصیل به میز می‌بخشد.',
-    price: 62,
-    compare_price: 76,
-    price_toman: 3380000,
-    compare_price_toman: 4100000,
-    stock_quantity: 22,
-    rating_avg: 4.96,
-    rating_count: 194,
-    is_featured: true,
-    badge: 'چکش‌کاری دست‌ساز',
-    badge_fa: 'چکش‌کاری دست‌ساز هنری',
-    archetype: 'nut-dish',
-    accent_color: '#eab308',
-    colors: [
-      { id: 'hammered-silver-gold', name: 'Hammered Silver & Gold Leaf', name_fa: 'نقره‌ای چکش‌کاری با قپه برگ طلایی', hex: '#cbd5e1', accentHex: '#eab308' },
-      { id: 'antique-pewter', name: 'Antique Pewter Patina', name_fa: 'سیاه‌قلم نقره‌ای آنتیک', hex: '#64748b', accentHex: '#f59e0b' },
-      { id: 'hammered-gold', name: 'Hammered Champagne Gold', name_fa: 'طلایی شامپاینی چکش‌کاری', hex: '#d4af37', accentHex: '#fef08a' },
-    ],
-    brand: BRANDS[0],
-    category: CATEGORIES[2],
-    images: [
-      { id: 401, url: '/images/products/nut-dish.png', alt: 'شکلات‌خوری و آجیل‌خوری آلومینیومی چکش‌کاری', is_primary: true },
-    ],
-    specs: [
-      { label: 'Craft Technique', label_fa: 'تکنیک ساخت', value: 'Cast Foot + Hand-Hammered Bowl', value_fa: 'پایه ریخته‌گری + کاسه و درب چکش‌کاری دستی' },
-      { label: 'Capacity & Size', label_fa: 'ابعاد و گنجایش', value: 'Ø 22 cm × H 29 cm (1.2 kg Nuts)', value_fa: 'قطر ۲۲ و ارتفاع ۲۹ سانتی‌متر (ظرفیت ۱.۲ کیلو آجیل)' },
-      { label: 'Finial Material', label_fa: 'جنس قپه درب', value: 'Electroplated Cast Brass-Aluminum', value_fa: 'آلیاژ ریخته‌گری با آبکاری PVD طلایی ثابت' },
-      { label: 'Care', label_fa: 'نگهداری و شستشو', value: 'Soft Wash — Zero Polish Needed', value_fa: 'بدون نیاز به جلاسنج — شستشوی آسان با ابر نرم' },
-    ],
-    highlights: [
-      'Airtight-fit aluminum dome keeps roasted nuts crisp for days',
-      'Hand-hammered facets sparkle brilliantly from every angle',
-      'Never oxidizes black unlike traditional silver-plated brass',
-    ],
-    highlights_fa: [
-      'برخلاف ظروف نقره‌نما و ورشو هرگز سیاه یا کدر نمی‌شود و نیاز به جلاسنج ندارد',
-      'بافت چکش‌کاری درخشان با انعکاس خیره‌کننده نور در شب‌نشینی‌ها و یلدا',
-      'تناسب دقیق لبه درب و کاسه برای حفظ تردی و تازگی تنقلات',
-    ],
-    reviews: [],
-  },
-  {
-    id: 5,
-    name: 'Negin 4-Bowl Aluminum Ordu & Relish Set',
-    name_fa: 'اردوخوری چهارخانه آلومینیومی مدل نگین دسته‌طلایی',
-    slug: 'negin-4bowl-aluminum-ordu-platter',
-    subtitle: '4 Detachable Hammered Aluminum Bowls on Wave Tray',
-    subtitle_fa: 'چهار کاسه چکش‌کاری مجزا روی استند موجی آلومینیوم با حلقه حمل شامپاینی',
-    description:
-      'Designed for effortless serving of nuts, dried fruits, olives, and sweets. All four hammered aluminum bowls lift individually out of the sculpted anodized wave cradle for quick refilling and washing.',
-    description_fa:
-      'طراحی هوشمندانه برای پذیرایی متنوع از آجیل چهارمغز، میوه خشک، شکلات و تنقلات. هر چهار پیاله چکش‌کاری آلومینیومی به‌صورت مجزا از روی استند موجی برداشته می‌شوند تا شارژ مجدد و شستشو در نهایت سهولت انجام شود.',
-    price: 78,
-    compare_price: 95,
-    price_toman: 4250000,
-    compare_price_toman: 5150000,
-    stock_quantity: 28,
-    rating_avg: 4.92,
-    rating_count: 176,
-    is_featured: true,
-    is_new: true,
-    badge: 'کاسه‌های مجزا قابل شستشو',
-    badge_fa: 'پیاله‌های مجزا',
+  'nut-ordur': {
     archetype: 'ordu-platter',
-    accent_color: '#eab308',
-    colors: [
-      { id: 'silver-obsidian-gold', name: 'Silver Bowls & Gold Loop', name_fa: 'پیاله سیلور با استند تیره و دسته طلایی', hex: '#cbd5e1', accentHex: '#eab308' },
-      { id: 'all-silver', name: 'Classic All-Silver Satin', name_fa: 'تمام سیلور یکدست', hex: '#e2e8f0', accentHex: '#94a3b8' },
-    ],
-    brand: BRANDS[0],
-    category: CATEGORIES[2],
-    images: [
-      { id: 501, url: '/images/products/ordu-platter.png', alt: 'اردوخوری چهارخانه آلومینیومی نگین', is_primary: true },
-    ],
-    specs: [
-      { label: 'Set Includes', label_fa: 'اجزای ست', value: '4 Hammered Bowls + Wave Stand', value_fa: '۴ عدد پیاله چکش‌کاری Ø۱۲ + استند موجی دسته‌دار' },
-      { label: 'Overall Span', label_fa: 'ابعاد کلی', value: '33 × 33 cm × Height 24 cm', value_fa: '۳۳ × ۳۳ سانتی‌متر • ارتفاع دسته ۲۴ سانتی‌متر' },
-      { label: 'Base Pads', label_fa: 'محافظ سطح میز', value: 'Non-Slip Silicone Velvet Feet', value_fa: 'مجهز به ضربه‌گیر مخملی زیر پایه جهت جلوگیری از خط افتادن میز' },
-      { label: 'Alloy', label_fa: 'آلیاژ تولیدی', value: 'Pure Food-Grade Aluminum', value_fa: 'آلومینیوم خالص خوراکی با پوشش ضداسید (مناسب ترشی و زیتون)' },
-    ],
-    highlights: [
-      'Acid-resistant coating safe for olives, dips, lemon & dried fruit',
-      'Sculpted vertical loop handle balances weight with one hand',
-      'Individual bowls stack neatly inside kitchen cabinets',
-    ],
-    highlights_fa: [
-      'مقاوم در برابر نمک و اسید مواد غذایی (مناسب آجیل شور، زیتون و میوه خشک)',
-      'دسته حلقه‌ای عمودی خوش‌فرم برای جابجایی متعادل تنها با یک دست',
-      'قابلیت جداسازی کامل هر ۴ کاسه از استند برای شستشوی سریع',
-    ],
-    reviews: [],
+    icon: 'Gem',
+    gradient: 'from-yellow-500/20 via-stone-300/10 to-transparent',
+    defaultAccent: '#d97706',
+    defaultImage: '/images/categories/nut-ordur.png',
+  },
+}
+
+export const DEFAULT_CATEGORY_PRESENTATION: CategoryVisualPresentation = {
+  archetype: 'fruit-bowl',
+  icon: 'Layers',
+  gradient: 'from-amber-400/20 via-slate-300/10 to-transparent',
+  defaultAccent: '#dfc08e',
+  defaultImage: '/images/categories/fruit-vessels.png',
+}
+
+/**
+ * Verified canonical backend SKUs & slugs for the 4 HeroStage3D showcase pieces.
+ * Matched explicitly by SKU or canonical slug — never by array index.
+ */
+export const HERO_SHOWCASE_ITEMS: readonly {
+  sku: string
+  slug: string
+}[] = [
+  { sku: 'ARU-101', slug: 'shahnameh-3tier-aluminum-pastry-stand' },
+  { sku: 'ARU-102', slug: 'lotus-fluted-aluminum-fruit-bowl' },
+  { sku: 'ARU-104', slug: 'domed-hammered-aluminum-nut-chalice' },
+  { sku: 'ARU-108', slug: 'kashkool-sculptural-aluminum-centerpiece' },
+] as const
+
+export const LEGACY_PRODUCT_SLUG_ALIASES: Readonly<Record<string, string>> = {
+  'royal-3tier-aluminum-stand': 'shahnameh-3tier-aluminum-pastry-stand',
+  'imperial-engraved-aluminum-tray': 'persepolis-engraved-aluminum-serving-tray',
+  'zarrin-hammered-aluminum-nut-dish': 'domed-hammered-aluminum-nut-chalice',
+  'negin-4bowl-aluminum-ordu-platter': 'chaharbagh-4bowl-aluminum-ordur-platter',
+  'isfahan-aluminum-tea-sugar-service': 'isfahan-anodized-aluminum-tea-hospitality-set',
+  'arulux-3arm-aluminum-candelabra': 'aria-3arm-cast-aluminum-candelabra',
+  'mowj-sculptural-aluminum-kashkool': 'kashkool-sculptural-aluminum-centerpiece',
+}
+
+export const LEGACY_CATEGORY_SLUG_ALIASES: Readonly<Record<string, string>> = {
+  'stands-fruit-bowls': 'pastry-stands',
+  'trays-tea-sets': 'serving-trays',
+  'nut-ordu-dishes': 'nut-ordur',
+  'candelabra-centerpieces': 'fruit-vessels',
+}
+
+export const LEGACY_BRAND_SLUG_ALIASES: Readonly<Record<string, string>> = {
+  'arumetal-atelier': 'aru-atelier',
+  'aruanodize-royal': 'zarrin-anodize',
+  'aruform-cnc': 'parsia-form',
+  'arubridal-heritage': 'simin-craft',
+}
+
+export function resolveCanonicalProductIdentifier(raw: string): string {
+  const trimmed = raw.trim()
+  return LEGACY_PRODUCT_SLUG_ALIASES[trimmed] || trimmed
+}
+
+export function resolveCategorySlugAlias(raw: string): string {
+  const trimmed = raw.trim()
+  return LEGACY_CATEGORY_SLUG_ALIASES[trimmed] || trimmed
+}
+
+export function resolveBrandSlugAlias(raw: string): string {
+  const trimmed = raw.trim()
+  return LEGACY_BRAND_SLUG_ALIASES[trimmed] || trimmed
+}
+
+/**
+ * Real anodized finishes backed by backend `Product.colors` JSON entries.
+ * Additional finishes returned by backend products are merged dynamically.
+ */
+export interface FinishFilterOption {
+  id: string
+  label: string
+  label_fa: string
+  hex: string
+}
+
+export const CANONICAL_FINISH_OPTIONS: readonly FinishFilterOption[] = [
+  {
+    id: 'champagne',
+    label: 'Satin Silver & Champagne Gold',
+    label_fa: 'سیلور ساتن و طلایی شامپاینی',
+    hex: '#d6b88a',
   },
   {
-    id: 6,
-    name: 'Isfahan Modern Cast Aluminum Tea & Sugar Set',
-    name_fa: 'سرویس چای‌خوری و قندان آلومینیومی مدل نقش‌جهان',
-    slug: 'isfahan-aluminum-tea-sugar-service',
-    subtitle: '6 Filigree Aluminum Tea Holders + Lidded Sugar Bowl + Engraved Tray',
-    subtitle_fa: 'ست کامل سینی گرد قلم‌زنی، قندان درب‌دار و ۶ استکان‌نگهدار مشبک آلومینیومی',
-    description:
-      'A modern tribute to Iranian tea hospitality. Intricate openwork cast-aluminum cup holders insulate your fingers from hot crystal glasses, paired with a matching footed sugar bowl and round engraved tray.',
-    description_fa:
-      'ادای احترام مدرن کارخانه آرو استور به فرهنگ اصیل چای ایرانی. استکان‌نگهدارهای مشبک ریخته‌گری آلومینیوم علاوه بر زیبایی چشم‌نواز، مانع داغ شدن دست شده و همراه با قندان پایه‌دار درب‌دار و سینی گرد حکاکی‌شده، سرویسی بی‌نقص می‌سازند.',
-    price: 118,
-    compare_price: 142,
-    price_toman: 6450000,
-    compare_price_toman: 7750000,
-    stock_quantity: 14,
-    rating_avg: 4.97,
-    rating_count: 263,
-    is_featured: true,
-    badge: 'ست کامل ۸ پارچه',
-    badge_fa: 'ست کامل پذیرایی چای',
-    archetype: 'tea-set',
-    accent_color: '#f59e0b',
-    colors: [
-      { id: 'silver-gold-finial', name: 'Brushed Silver & Gold Finial', name_fa: 'سیلور قلم‌زنی با قپه طلایی', hex: '#d8dee9', accentHex: '#eab308' },
-      { id: 'royal-champagne', name: 'Champagne Gold Heritage', name_fa: 'شامپاینی سلطنتی', hex: '#d4af37', accentHex: '#fef08a' },
-    ],
-    editions: [
-      { id: '6-person-set', label: '6-Person Complete Service + Schott Glasses', label_fa: 'سرویس ۶ نفره کامل (به همراه استکان کریستال و قاشق قندان)', priceDelta: 0, priceDeltaToman: 0 },
-      { id: '12-person-set', label: '12-Person Grand Bridal Service', label_fa: 'سرویس ۱۲ نفره ویژه جهیزیه و مهمانی', priceDelta: 65, priceDeltaToman: 3500000 },
-    ],
-    brand: BRANDS[3],
-    category: CATEGORIES[1],
-    images: [
-      { id: 601, url: '/images/products/tea-set.png', alt: 'سرویس چای‌خوری و قندان آلومینیومی نقش‌جهان', is_primary: true },
-    ],
-    specs: [
-      { label: 'Package Contents', label_fa: 'اقلام داخل جعبه', value: 'Tray + Sugar Bowl + Spoon + 6 Holders', value_fa: 'سینی گرد Ø۳۸ + قندان درب‌دار + قاشق + ۶ جاستکانی و استکان' },
-      { label: 'Casting Detail', label_fa: 'ظرافت قالب‌سازی', value: 'High-Pressure Precision Filigree', value_fa: 'ریخته‌گری تحت فشار دقیق با طرح مشبک اسلیمی-مدرن' },
-      { label: 'Thermal Comfort', label_fa: 'عایق حرارتی دسته', value: 'Cool-Touch Cast Ear Handles', value_fa: 'دسته‌های خنک‌شونده سریع در برابر چای داغ' },
-      { label: 'Packaging', label_fa: 'بسته‌بندی', value: 'Velvet-Lined Hard Bridal Chest', value_fa: 'جعبه هاردباکس مخمل‌کوبی شده مناسب هدیه و جهیزیه' },
-    ],
-    highlights: [
-      'Removable crystal tea glasses for dishwasher cleaning',
-      'Matching cast-aluminum sugar spoon rests neatly in lid notch',
-      'Heirloom durability crafted from solid non-rusting aluminum',
-    ],
-    highlights_fa: [
-      'استکان‌های بلور شفاف قابل جداسازی جهت شستشو در ماشین ظرفشویی',
-      'دارای شکاف مخصوص قاشق روی درب قندان آلومینیومی',
-      'بسته‌بندی تشریفاتی هاردباکس فوق‌العاده نفیس برای هدیه و عروس',
-    ],
-    reviews: [],
+    id: 'silver',
+    label: 'Mirror Silver Anodized',
+    label_fa: 'آلومینیوم نقره‌ای آینه‌ای',
+    hex: '#e2e8f0',
   },
-  {
-    id: 7,
-    name: 'AruLux 3-Arm Sculptural Aluminum Candelabra',
-    name_fa: 'شمعدان سه‌شاخه آلومینیومی دکوراتیو مدل آرولوکس',
-    slug: 'arulux-3arm-aluminum-candelabra',
-    subtitle: 'Fluid Cast Aluminum Arms & Anodized Champagne Candle Cups',
-    subtitle_fa: 'شاخه‌های منحنی یکپارچه آلومینیوم برس‌خورده با لاله‌های شامپاینی',
-    description:
-      'Elevate formal dinners and reception consoles with sweeping fluid aluminum curves and warm champagne-gold candle holders. Cast in one solid balanced form with weighted stepped circular base.',
-    description_fa:
-      'جلوه‌ای باشکوه برای میز شام، کنسول پذیرایی و سفره عقد. بازوهای منحنی یکپارچه از آلومینیوم برس‌خورده در کنار سرشمعی‌های طلایی شامپاینی و پایه پله‌ای سنگین، تعادل و درخششی خیره‌کننده خلق کرده‌اند.',
-    price: 74,
-    compare_price: 89,
-    price_toman: 3980000,
-    compare_price_toman: 4800000,
-    stock_quantity: 17,
-    rating_avg: 4.9,
-    rating_count: 128,
-    badge: 'مناسب کنسول و میز شام',
-    badge_fa: 'مناسب میز شام و کنسول',
-    archetype: 'candelabra',
-    accent_color: '#fbbf24',
-    colors: [
-      { id: 'silver-gold-cups', name: 'Brushed Silver & Gold Cups', name_fa: 'سیلور مات با سرشمعی شامپاینی', hex: '#d8dee9', accentHex: '#eab308' },
-      { id: 'bronze-gold', name: 'Antique Bronze & Gold', name_fa: 'برنزی آنتیک و طلایی', hex: '#78553a', accentHex: '#f59e0b' },
-    ],
-    editions: [
-      { id: 'single-candelabra', label: 'Single 3-Arm Candelabra', label_fa: 'تک‌عددی سه‌شاخه', priceDelta: 0, priceDeltaToman: 0 },
-      { id: 'pair-set', label: 'Matched Pair (2 Candelabras)', label_fa: 'جفت قرینه کنسول و میز شام (۲ عدد)', priceDelta: 64, priceDeltaToman: 3450000 },
-    ],
-    brand: BRANDS[1],
-    category: CATEGORIES[3],
-    images: [
-      { id: 701, url: '/images/products/candelabra.png', alt: 'شمعدان سه‌شاخه آلومینیومی آرولوکس', is_primary: true },
-    ],
-    specs: [
-      { label: 'Dimensions', label_fa: 'ابعاد شمعدان', value: 'Width 31 cm × Height 28 cm', value_fa: 'عرض شاخه‌ها ۳۱ سانتی‌متر • ارتفاع بدنه ۲۸ سانتی‌متر' },
-      { label: 'Wax Resistance', label_fa: 'تمیزکاری اشک شمع', value: 'Non-Stick Anodized Cups', value_fa: 'پوشش نچسب آنودایز جهت جداسازی راحت پارافین شمع' },
-      { label: 'Base Weight', label_fa: 'وزن و ایستایی', value: '1.6 kg Anti-Tip Weighted Foot', value_fa: '۱۶۰۰ گرم با مرکز ثقل پایین و ایمنی بالا' },
-      { label: 'Candle Fit', label_fa: 'سایز شمع استاندارد', value: '22mm Standard Taper Candles', value_fa: 'مناسب انواع شمع قلمی استاندارد و شمع وارمر بلند' },
-    ],
-    highlights: [
-      'Sculpted organic arms cast without visible weld seams',
-      'Heat-proof anodized candle cups never discolor from flame',
-      'Includes 3 complimentary ivory beeswax taper candles',
-    ],
-    highlights_fa: [
-      'ریخته‌گری یکپارچه بازوها بدون هیچ‌گونه خط جوش یا درز ظاهری',
-      'مقاومت کامل سرشمعی‌های شامپاینی در برابر حرارت شعله شمع',
-      'همراه با ۳ عدد شمع قلمی عاجی بدون دود هدیه در بسته‌بندی',
-    ],
-    reviews: [],
-  },
-  {
-    id: 8,
-    name: 'Mowj Sculptural Aluminum Kashkool Vessel',
-    name_fa: 'کشکول پذیرایی مدرن آلومینیومی مدل موج دوپوست',
-    slug: 'mowj-sculptural-aluminum-kashkool',
-    subtitle: 'Two-Tone Satin Silver Exterior & Champagne-Anodized Inner Bowl',
-    subtitle_fa: 'فرم ارگانیک موجی با بیرون سیلور برس‌خورده و داخل طلایی شامپاینی',
-    description:
-      'Our flagship contemporary centerpiece vessel. Cast in thick solid aluminum with sweeping asymmetric wave contours, brushed silver exterior walls, and a warm champagne-anodized interior that glows softly.',
-    description_fa:
-      'نماد طراحی مدرن در صنعت ظروف پذیرایی آلومینیومی ایران. این کشکول با فرم موجی سیال از آلومینیوم ضخیم ریخته‌گری شده؛ بدنه بیرونی دارای پرداخت ساتن نقره‌ای و داخل کاسه دارای پوشش شامپاینی گرم است که جلوه‌ای بی‌نظیر به میوه، شیرینی یا گل‌آرایی خشک می‌دهد.',
-    price: 105,
-    compare_price: 129,
-    price_toman: 5690000,
-    compare_price_toman: 6950000,
-    stock_quantity: 12,
-    rating_avg: 4.98,
-    rating_count: 154,
-    is_featured: true,
-    is_new: true,
-    badge: 'اثر کلکسیونی دوپوست',
-    badge_fa: 'اثر هنری دوپوست (سیلور-طلایی)',
-    archetype: 'kashkool-vessel',
-    accent_color: '#f59e0b',
-    colors: [
-      { id: 'duotone-silver-gold', name: 'Silver Exterior & Champagne Interior', name_fa: 'دوپوست سیلور مات و داخل شامپاینی', hex: '#d8dee9', accentHex: '#eab308' },
-      { id: 'obsidian-gold-inner', name: 'Charcoal Exterior & Gold Interior', name_fa: 'دوپوست دودی تیره و داخل طلایی', hex: '#334155', accentHex: '#f59e0b' },
-    ],
-    brand: BRANDS[2],
-    category: CATEGORIES[3],
-    images: [
-      { id: 801, url: '/images/products/kashkool-vessel.png', alt: 'کشکول پذیرایی مدرن آلومینیومی موج', is_primary: true },
-    ],
-    specs: [
-      { label: 'Vessel Length', label_fa: 'طول و عرض کشکول', value: '46 × 23 cm × Height 18 cm', value_fa: 'طول ۴۶ × عرض ۲۳ × ارتفاع ۱۸ سانتی‌متر' },
-      { label: 'Finish Tech', label_fa: 'فناوری رنگ دوگانه', value: 'Dual-Mask Satin & Champagne Anodize', value_fa: 'آنودایز دوگانه تفکیک‌شده بیرون سیلور و داخل شامپاینی' },
-      { label: 'Wall Thickness', label_fa: 'ضخامت لبه موجی', value: '6 mm Sculpted Cast Edge', value_fa: '۶ میلی‌متر آلومینیوم توپر با لبه‌های صیقلی نرم' },
-      { label: 'Usage', label_fa: 'کاربری چندمنظوره', value: 'Fruit, Pastry, Nut or Console Decor', value_fa: 'میوه‌خوری، شیرینی‌خوری یا سنترپیس دکوراتیو میز و اپن' },
-    ],
-    highlights: [
-      'Signature dual-tone aluminum craft: cool silver outside, warm gold inside',
-      'Flowing ergonomic wave ends double as natural carry grips',
-      'Presented in a numbered certificate luxury box',
-    ],
-    highlights_fa: [
-      'تضاد چشم‌نواز سیلور سرد در بیرون و درخشش طلایی گرم در داخل ظرف',
-      'طراحی ارگونومیک دو سر موج برای جابجایی راحت روی میز پذیرایی',
-      'ارائه به همراه شناسنامه اصالت ساخت کارخانه آرو استور',
-    ],
-    reviews: [],
-  },
-]
+] as const

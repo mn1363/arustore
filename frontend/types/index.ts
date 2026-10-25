@@ -25,11 +25,23 @@ export interface ProductColorOption {
   accentHex: string
 }
 
+export interface ProductEditionOption {
+  id: string
+  label: string
+  label_fa: string
+  priceDelta: number
+  priceDeltaToman: number
+}
+
 export interface Brand {
   id: number
   name: string
   name_fa: string
   slug: string
+  description?: string | null
+  description_fa?: string | null
+  logo?: string | null
+  country?: string
   tagline: string
   tagline_fa: string
   product_count: number
@@ -37,6 +49,7 @@ export interface Brand {
 
 export interface Category {
   id: number
+  parent_id?: number | null
   name: string
   name_fa: string
   slug: string
@@ -72,6 +85,7 @@ export interface ProductReview {
 
 export interface Product {
   id: number
+  sku?: string
   name: string
   name_fa: string
   slug: string
@@ -84,6 +98,8 @@ export interface Product {
   price_toman: number
   compare_price_toman?: number
   stock_quantity: number
+  in_stock?: boolean
+  is_on_sale?: boolean
   rating_avg: number
   rating_count: number
   is_featured?: boolean
@@ -93,9 +109,9 @@ export interface Product {
   archetype: Model3DArchetype
   accent_color: string
   colors: ProductColorOption[]
-  editions?: { id: string; label: string; label_fa: string; priceDelta: number; priceDeltaToman: number }[]
-  brand: Brand
-  category: Category
+  editions?: ProductEditionOption[]
+  brand?: Brand | null
+  category?: Category | null
   images: ProductImage[]
   specs: ProductSpec[]
   highlights: string[]

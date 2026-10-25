@@ -6,6 +6,10 @@ import { Box, Heart, Plus, ShoppingBag } from 'lucide-react'
 import Card3DTilt from '@/components/ui/Card3DTilt'
 import { cn, formatPrice, getProductTitle } from '@/lib/utils'
 import { Product } from '@/types'
+import {
+  getProductPrimaryFinish,
+  isProductAvailable,
+} from '@/lib/data/catalog'
 import { useStore } from '@/lib/store/useStore'
 import { getDict } from '@/lib/data/i18n'
 
@@ -30,7 +34,9 @@ export default function ProductCard({
   const dict = getDict(locale)
 
   const [colorIdx, setColorIdx] = useState(0)
-  const activeColor = product.colors[colorIdx] || product.colors[0]
+  const activeColor = getProductPrimaryFinish(product, colorIdx)
+  const available = isProductAvailable(product)
+  const primaryImage = product.images[0]?.url
   const isWishlisted = wishlistIds.includes(product.id)
 
   if (variant === 'list') {
@@ -45,12 +51,18 @@ export default function ProductCard({
           href={`/product/${product.slug}`}
           className="relative w-full sm:w-64 h-48 sm:h-auto overflow-hidden flex-shrink-0 product-pedestal-stage"
         >
-          <img
-            src={product.images[0]?.url}
-            alt={getProductTitle(product, locale)}
-            loading="lazy"
-            className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
-          />
+          {primaryImage ? (
+            <img
+              src={primaryImage}
+              alt={getProductTitle(product, locale)}
+              loading="lazy"
+              className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[#dfc08e]/50">
+              <Box className="w-10 h-10" />
+            </div>
+          )}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#08090f]/75 to-transparent"
@@ -64,27 +76,42 @@ export default function ProductCard({
                 {getProductTitle(product, locale)}
               </h3>
             </Link>
-            <div className="flex items-center gap-2">
-              {product.colors.map((c, idx) => (
-                <button
-                  key={c.id}
-                  onClick={() => setColorIdx(idx)}
-                  aria-label={locale === 'fa' ? c.name_fa : c.name}
-                  className={cn(
-                    'w-4 h-4 rounded-full border transition-transform',
-                    colorIdx === idx ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.45)]' : 'border-white/25 opacity-70 hover:opacity-100'
-                  )}
-                  style={{
-                    background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
-                  }}
-                />
-              ))}
-            </div>
+            {product.colors.length > 0 && (
+              <div className="flex items-center gap-2">
+                {product.colors.map((c, idx) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setColorIdx(idx)}
+                    aria-label={locale === 'fa' ? c.name_fa : c.name}
+                    className={cn(
+                      'w-4 h-4 rounded-full border transition-transform',
+                      colorIdx === idx
+                        ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.45)]'
+                        : 'border-white/25 opacity-70 hover:opacity-100'
+                    )}
+                    style={{
+                      background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-4 pt-3 border-t border-white/[0.07]">
-            <div className="text-base font-bold text-[#dfc08e]">
-              {formatPrice(product.price, locale, product.price_toman)}
+            <div className="flex items-baseline gap-2">
+              <span className="text-base font-bold text-[#dfc08e]">
+                {formatPrice(product.price, locale, product.price_toman)}
+              </span>
+              {product.compare_price && product.compare_price > product.price && (
+                <span className="text-xs text-[#6e768a] line-through">
+                  {formatPrice(
+                    product.compare_price,
+                    locale,
+                    product.compare_price_toman
+                  )}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -97,10 +124,17 @@ export default function ProductCard({
               </button>
               <button
                 onClick={() => addToCart(product, 1, activeColor)}
-                className="px-4 py-2 rounded-xl champagne-btn font-bold text-xs flex items-center gap-1.5"
+                disabled={!available}
+                className="px-4 py-2 rounded-xl champagne-btn font-bold text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ShoppingBag className="w-3.5 h-3.5" />
-                <span>{dict.common.addToCart}</span>
+                <span>
+                  {available
+                    ? dict.common.addToCart
+                    : locale === 'fa'
+                    ? 'ناموجود'
+                    : 'Out of stock'}
+                </span>
               </button>
             </div>
           </div>
@@ -115,12 +149,18 @@ export default function ProductCard({
         {/* Dimensional Pedestal Image Stage (Real Product Undistorted) */}
         <div className="relative aspect-[16/11] w-full overflow-hidden product-pedestal-stage border-b border-white/[0.06]">
           <Link href={`/product/${product.slug}`} className="block w-full h-full">
-            <img
-              src={product.images[0]?.url}
-              alt={getProductTitle(product, locale)}
-              loading="lazy"
-              className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
-            />
+            {primaryImage ? (
+              <img
+                src={primaryImage}
+                alt={getProductTitle(product, locale)}
+                loading="lazy"
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[#dfc08e]/50">
+                <Box className="w-10 h-10" />
+              </div>
+            )}
           </Link>
 
           {/* Subtle Environmental Rim & Ground Shadow */}
@@ -175,25 +215,27 @@ export default function ProductCard({
               </h3>
             </Link>
 
-            <div className="flex items-center gap-2">
-              {product.colors.map((c, idx) => (
-                <button
-                  key={c.id}
-                  onClick={() => setColorIdx(idx)}
-                  title={locale === 'fa' ? c.name_fa : c.name}
-                  aria-label={locale === 'fa' ? c.name_fa : c.name}
-                  className={cn(
-                    'w-3.5 h-3.5 rounded-full border transition-transform',
-                    colorIdx === idx
-                      ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.4)]'
-                      : 'border-white/25 opacity-70 hover:opacity-100'
-                  )}
-                  style={{
-                    background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
-                  }}
-                />
-              ))}
-            </div>
+            {product.colors.length > 0 && (
+              <div className="flex items-center gap-2">
+                {product.colors.map((c, idx) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setColorIdx(idx)}
+                    title={locale === 'fa' ? c.name_fa : c.name}
+                    aria-label={locale === 'fa' ? c.name_fa : c.name}
+                    className={cn(
+                      'w-3.5 h-3.5 rounded-full border transition-transform',
+                      colorIdx === idx
+                        ? 'scale-125 border-white shadow-[0_0_8px_rgba(223,192,142,0.4)]'
+                        : 'border-white/25 opacity-70 hover:opacity-100'
+                    )}
+                    style={{
+                      background: `linear-gradient(135deg, ${c.hex} 42%, ${c.accentHex} 100%)`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-3.5 border-t border-white/[0.07] flex items-center justify-between gap-2">
@@ -203,11 +245,17 @@ export default function ProductCard({
 
             <button
               onClick={() => addToCart(product, 1, activeColor)}
-              disabled={product.stock_quantity <= 0}
-              className="px-3.5 py-1.5 rounded-xl champagne-btn text-xs font-bold flex items-center gap-1"
+              disabled={!available}
+              className="px-3.5 py-1.5 rounded-xl champagne-btn text-xs font-bold flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{locale === 'fa' ? 'افزودن' : 'Add'}</span>
+              {available ? (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{locale === 'fa' ? 'افزودن' : 'Add'}</span>
+                </>
+              ) : (
+                <span>{locale === 'fa' ? 'ناموجود' : 'Sold out'}</span>
+              )}
             </button>
           </div>
         </div>

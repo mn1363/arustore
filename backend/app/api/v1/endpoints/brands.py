@@ -9,12 +9,14 @@ from app.models.brand import Brand
 from app.models.product import Product
 from app.models.user import User
 from app.schemas.common import BrandCreate, BrandResponse
+from app.services.product_service import LEGACY_BRAND_SLUG_ALIASES
 from app.utils.slugify import ensure_unique_slug, generate_slug
 
 router = APIRouter()
 
 
 @router.get("/", response_model=List[BrandResponse])
+@router.get("", response_model=List[BrandResponse], include_in_schema=False)
 async def list_brands(
     db: AsyncSession = Depends(get_db),
 ) -> List[BrandResponse]:
@@ -58,7 +60,8 @@ async def get_brand(
     if identifier.isdigit():
         stmt = stmt.where(Brand.id == int(identifier))
     else:
-        stmt = stmt.where(Brand.slug == identifier)
+        resolved_slug = LEGACY_BRAND_SLUG_ALIASES.get(identifier, identifier)
+        stmt = stmt.where(Brand.slug.in_(list({identifier, resolved_slug})))
     brand = (await db.execute(stmt)).scalar_one_or_none()
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
