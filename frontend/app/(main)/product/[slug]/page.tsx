@@ -449,7 +449,9 @@ export default function ProductDetailPage() {
                 </button>
 
                 <button
-                  onClick={() => toggleWishlist(product.id)}
+                  onClick={() => {
+                    void toggleWishlist(product.id, product)
+                  }}
                   aria-label="Wishlist"
                   className={`p-3.5 rounded-xl secondary-3d-btn ${
                     isWishlisted ? 'text-[#dfc08e] border-[#dfc08e]/50' : ''

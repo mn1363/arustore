@@ -6,6 +6,7 @@ import { Minus, Plus, ShoppingBag, Trash2, X, ArrowLeft, ArrowRight } from 'luci
 import { useCart } from '@/hooks/useCart'
 import { useStore } from '@/lib/store/useStore'
 import { formatNumber, formatPrice, getProductTitle } from '@/lib/utils'
+import { getCartItemLineTotals } from '@/lib/api/cart'
 import { getDict } from '@/lib/data/i18n'
 
 export default function CartDrawer() {
@@ -16,6 +17,8 @@ export default function CartDrawer() {
     itemCount,
     subtotalUsd,
     subtotalToman,
+    cartLoading,
+    cartError,
     updateCartQuantity,
     removeFromCart,
     isCartDrawerOpen,
@@ -45,6 +48,15 @@ export default function CartDrawer() {
           </button>
         </div>
 
+        {cartError && (
+          <div
+            role="alert"
+            className="mx-5 mt-4 px-3.5 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300"
+          >
+            {cartError}
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-4">
@@ -59,69 +71,80 @@ export default function CartDrawer() {
               </Link>
             </div>
           ) : (
-            cart.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-2xl card-level-2 p-3 flex items-center gap-3.5"
-              >
-                <div className="w-20 h-16 rounded-xl overflow-hidden product-pedestal-stage border border-white/[0.06] flex-shrink-0">
-                  <img
-                    src={item.product.images[0]?.url}
-                    alt={item.product.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <Link
-                    href={`/product/${item.product.slug}`}
-                    onClick={() => setCartDrawerOpen(false)}
-                    className="text-sm font-bold text-[#f4f4f6] hover:text-[#dfc08e] line-clamp-1"
-                  >
-                    {getProductTitle(item.product, locale)}
-                  </Link>
-                  <div className="text-[11px] text-[#979fb2] mt-0.5 truncate">
-                    {locale === 'fa'
-                      ? item.selectedColor.name_fa
-                      : item.selectedColor.name}
+            cart.map((item) => {
+              const { lineUsd, lineToman } = getCartItemLineTotals(item)
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-2xl card-level-2 p-3 flex items-center gap-3.5"
+                >
+                  <div className="w-20 h-16 rounded-xl overflow-hidden product-pedestal-stage border border-white/[0.06] flex-shrink-0">
+                    <img
+                      src={item.product.images[0]?.url}
+                      alt={item.product.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
 
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="text-xs font-bold text-[#dfc08e]">
-                      {formatPrice(
-                        item.product.price * item.quantity,
-                        locale,
-                        item.product.price_toman * item.quantity
-                      )}
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      href={`/product/${item.product.slug}`}
+                      onClick={() => setCartDrawerOpen(false)}
+                      className="text-sm font-bold text-[#f4f4f6] hover:text-[#dfc08e] line-clamp-1"
+                    >
+                      {getProductTitle(item.product, locale)}
+                    </Link>
+                    <div className="text-[11px] text-[#979fb2] mt-0.5 truncate">
+                      {locale === 'fa'
+                        ? item.selectedColor.name_fa
+                        : item.selectedColor.name}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
-                        className="w-6 h-6 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="text-xs font-bold w-5 text-center text-[#f4f4f6]">
-                        {formatNumber(item.quantity, locale)}
-                      </span>
-                      <button
-                        onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
-                        className="w-6 h-6 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="p-1 text-[#7d8597] hover:text-white ms-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="text-xs font-bold text-[#dfc08e]">
+                        {formatPrice(lineUsd, locale, lineToman)}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={cartLoading}
+                          onClick={() => {
+                            void updateCartQuantity(item.id, item.quantity - 1)
+                          }}
+                          className="w-6 h-6 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white disabled:opacity-40"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs font-bold w-5 text-center text-[#f4f4f6]">
+                          {formatNumber(item.quantity, locale)}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={cartLoading}
+                          onClick={() => {
+                            void updateCartQuantity(item.id, item.quantity + 1)
+                          }}
+                          className="w-6 h-6 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white disabled:opacity-40"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={cartLoading}
+                          onClick={() => {
+                            void removeFromCart(item.id)
+                          }}
+                          className="p-1 text-[#7d8597] hover:text-white ms-1 disabled:opacity-40"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
 

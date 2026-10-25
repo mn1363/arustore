@@ -37,27 +37,23 @@ export default function ShippingForm({
           label={locale === 'fa' ? 'نام و نام خانوادگی' : 'Full Name'}
           value={data.fullName}
           onChange={(e) => onChange({ ...data, fullName: e.target.value })}
-          required
         />
         <Input
           label={locale === 'fa' ? 'شماره تماس' : 'Phone Number'}
           dir="ltr"
           value={data.phone}
           onChange={(e) => onChange({ ...data, phone: e.target.value })}
-          required
         />
         <Input
           label={locale === 'fa' ? 'شهر' : 'City'}
           value={data.city}
           onChange={(e) => onChange({ ...data, city: e.target.value })}
-          required
         />
         <Input
           label={locale === 'fa' ? 'کد پستی' : 'Postal Code'}
           dir="ltr"
           value={data.postalCode}
           onChange={(e) => onChange({ ...data, postalCode: e.target.value })}
-          required
         />
       </div>
 
@@ -65,7 +61,6 @@ export default function ShippingForm({
         label={locale === 'fa' ? 'نشانی کامل' : 'Street Address'}
         value={data.address}
         onChange={(e) => onChange({ ...data, address: e.target.value })}
-        required
       />
     </div>
   )

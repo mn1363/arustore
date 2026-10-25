@@ -18,6 +18,7 @@ router = APIRouter()
 
 
 @router.get("/", response_model=CartSummaryResponse)
+@router.get("", response_model=CartSummaryResponse, include_in_schema=False)
 async def get_cart(
     promo_code: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
@@ -57,6 +58,7 @@ async def remove_cart_item(
 
 
 @router.delete("/", response_model=MessageResponse)
+@router.delete("", response_model=MessageResponse, include_in_schema=False)
 async def clear_cart(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

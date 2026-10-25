@@ -121,10 +121,28 @@ export interface Product {
 
 export interface CartItemType {
   id: string
+  serverItemId?: number
   product: Product
   quantity: number
   selectedColor: ProductColorOption
   selectedEdition?: string
+  unitPrice?: number
+  unitPriceToman?: number
+  lineTotal?: number
+  lineTotalToman?: number
+}
+
+export interface ServerCartSummary {
+  items: CartItemType[]
+  itemCount: number
+  subtotalUsd: number
+  subtotalToman: number
+  discountUsd: number
+  discountToman: number
+  totalUsd: number
+  totalToman: number
+  promoCode: string | null
+  promoPercent: number
 }
 
 export interface OrderItemSummary {

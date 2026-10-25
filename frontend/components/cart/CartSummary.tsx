@@ -21,27 +21,40 @@ export default function CartSummary() {
     totalToman,
     promoCode,
     promoPercent,
+    isAuthenticatedCart,
     applyPromoCode,
     removePromoCode,
   } = useCart()
 
   const [codeInput, setCodeInput] = useState('')
+  const [promoError, setPromoError] = useState('')
+  const [applying, setApplying] = useState(false)
 
-  const handleApply = (e: React.FormEvent) => {
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!codeInput.trim()) return
-    const ok = applyPromoCode(codeInput)
-    if (ok) {
-      setCodeInput('')
-      pushToast({
-        title: locale === 'fa' ? 'کد تخفیف اعمال شد' : 'Promo code applied',
-        type: 'success',
-      })
-    } else {
-      pushToast({
-        title: locale === 'fa' ? 'کد تخفیف معتبر نیست' : 'Invalid promo code',
-        type: 'error',
-      })
+    if (!codeInput.trim() || applying) return
+    setApplying(true)
+    setPromoError('')
+    try {
+      const result = await applyPromoCode(codeInput)
+      if (result.ok) {
+        setCodeInput('')
+        pushToast({
+          title: locale === 'fa' ? 'کد تخفیف اعمال شد' : 'Promo code applied',
+          type: 'success',
+        })
+      } else {
+        const msg =
+          result.error ||
+          (locale === 'fa' ? 'کد تخفیف معتبر نیست' : 'Invalid promo code')
+        setPromoError(msg)
+        pushToast({
+          title: msg,
+          type: 'error',
+        })
+      }
+    } finally {
+      setApplying(false)
     }
   }
 
@@ -60,28 +73,55 @@ export default function CartSummary() {
             </span>
           </div>
           <button
-            onClick={removePromoCode}
+            type="button"
+            onClick={() => {
+              void removePromoCode()
+            }}
             className="text-[#979fb2] hover:text-white underline"
           >
             {locale === 'fa' ? 'حذف' : 'Remove'}
           </button>
         </div>
       ) : (
-        <form onSubmit={handleApply} className="flex gap-2">
-          <input
-            type="text"
-            dir="ltr"
-            value={codeInput}
-            onChange={(e) => setCodeInput(e.target.value)}
-            placeholder={locale === 'fa' ? 'کد تخفیف (مثلاً ARU3D)' : 'Promo code'}
-            className="flex-1 rounded-xl bg-[#0a0c14] border border-white/[0.1] px-3.5 py-2 text-xs text-white placeholder:text-[#666e82] focus:outline-none focus:border-[#dfc08e]/60"
-          />
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-xl secondary-3d-btn text-xs font-bold"
-          >
-            {locale === 'fa' ? 'ثبت' : 'Apply'}
-          </button>
+        <form onSubmit={handleApply} className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              dir="ltr"
+              value={codeInput}
+              onChange={(e) => {
+                setCodeInput(e.target.value)
+                if (promoError) setPromoError('')
+              }}
+              placeholder={locale === 'fa' ? 'کد تخفیف (مثلاً ARU3D)' : 'Promo code'}
+              className="flex-1 rounded-xl bg-[#0a0c14] border border-white/[0.1] px-3.5 py-2 text-xs text-white placeholder:text-[#666e82] focus:outline-none focus:border-[#dfc08e]/60"
+            />
+            <button
+              type="submit"
+              disabled={applying}
+              className="px-4 py-2 rounded-xl secondary-3d-btn text-xs font-bold disabled:opacity-50"
+            >
+              {applying
+                ? locale === 'fa'
+                  ? 'بررسی...'
+                  : 'Checking...'
+                : locale === 'fa'
+                ? 'ثبت'
+                : 'Apply'}
+            </button>
+          </div>
+          {!isAuthenticatedCart && (
+            <p className="text-[11px] text-[#979fb2]">
+              {locale === 'fa'
+                ? 'بررسی و اعمال کد تخفیف پس از ورود به حساب کاربری انجام می‌شود.'
+                : 'Sign in to validate and apply a promo code.'}
+            </p>
+          )}
+          {promoError && (
+            <p role="alert" className="text-[11px] text-rose-400">
+              {promoError}
+            </p>
+          )}
         </form>
       )}
 

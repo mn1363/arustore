@@ -6,20 +6,23 @@ import { Minus, Plus, Trash2 } from 'lucide-react'
 import { CartItemType } from '@/types'
 import { useStore } from '@/lib/store/useStore'
 import { formatNumber, formatPrice, getProductTitle } from '@/lib/utils'
+import { getCartItemLineTotals, getCartItemUnitPrices } from '@/lib/api/cart'
 
 export default function CartItem({
   item,
   onUpdateQty,
   onRemove,
+  disabled = false,
 }: {
   item: CartItemType
   onUpdateQty: (id: string, qty: number) => void
   onRemove: (id: string) => void
+  disabled?: boolean
 }) {
   const locale = useStore((s) => s.locale)
   const ed = item.product.editions?.find((e) => e.id === item.selectedEdition)
-  const unitUsd = item.product.price + (ed?.priceDelta || 0)
-  const unitToman = item.product.price_toman + (ed?.priceDeltaToman || 0)
+  const { unitUsd, unitToman } = getCartItemUnitPrices(item)
+  const { lineUsd, lineToman } = getCartItemLineTotals(item)
 
   return (
     <div className="rounded-2xl card-level-2 p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-5">
@@ -55,18 +58,23 @@ export default function CartItem({
               {locale === 'fa' ? ed.label_fa : ed.label}
             </span>
           )}
+          <span className="text-[11px] text-[#666e82]">
+            {formatPrice(unitUsd, locale, unitToman)}
+          </span>
         </div>
       </div>
 
       <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-3">
         <div className="text-base font-bold text-[#dfc08e]">
-          {formatPrice(unitUsd * item.quantity, locale, unitToman * item.quantity)}
+          {formatPrice(lineUsd, locale, lineToman)}
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            disabled={disabled}
             onClick={() => onUpdateQty(item.id, item.quantity - 1)}
-            className="w-8 h-8 rounded-lg secondary-3d-btn flex items-center justify-center"
+            className="w-8 h-8 rounded-lg secondary-3d-btn flex items-center justify-center disabled:opacity-40"
           >
             <Minus className="w-3.5 h-3.5" />
           </button>
@@ -74,14 +82,18 @@ export default function CartItem({
             {formatNumber(item.quantity, locale)}
           </span>
           <button
+            type="button"
+            disabled={disabled}
             onClick={() => onUpdateQty(item.id, item.quantity + 1)}
-            className="w-8 h-8 rounded-lg secondary-3d-btn flex items-center justify-center"
+            className="w-8 h-8 rounded-lg secondary-3d-btn flex items-center justify-center disabled:opacity-40"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
           <button
+            type="button"
+            disabled={disabled}
             onClick={() => onRemove(item.id)}
-            className="p-2 rounded-lg text-[#979fb2] hover:text-white ms-1"
+            className="p-2 rounded-lg text-[#979fb2] hover:text-white ms-1 disabled:opacity-40"
             title="Remove"
           >
             <Trash2 className="w-4 h-4" />

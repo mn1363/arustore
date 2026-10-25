@@ -322,30 +322,50 @@ export const aruApi = {
       }),
   },
   cart: {
-    get: (token?: string, promoCode?: string) =>
-      apiFetch(
+    get: <T = unknown>(promoCode?: string | null, options?: ApiRequestOptions) =>
+      apiFetch<T>(
         `/cart/${promoCode ? `?promo_code=${encodeURIComponent(promoCode)}` : ''}`,
-        { token }
+        options
       ),
-    addItem: (
-      token: string | undefined,
+    addItem: <T = unknown>(
       payload: {
         product_id: number
         quantity: number
-        selected_color?: Record<string, unknown>
-        selected_edition?: string
-      }
+        selected_color?: Record<string, unknown> | null
+        selected_edition?: string | null
+      },
+      options?: ApiRequestOptions
     ) =>
-      apiFetch('/cart/items', {
+      apiFetch<T>('/cart/items', {
         method: 'POST',
-        token,
         body: JSON.stringify(payload),
+        ...options,
       }),
-    applyPromo: (token: string | undefined, code: string) =>
-      apiFetch('/cart/apply-promo', {
+    updateItem: <T = unknown>(
+      itemId: number,
+      quantity: number,
+      options?: ApiRequestOptions
+    ) =>
+      apiFetch<T>(`/cart/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ quantity }),
+        ...options,
+      }),
+    removeItem: <T = unknown>(itemId: number, options?: ApiRequestOptions) =>
+      apiFetch<T>(`/cart/items/${itemId}`, {
+        method: 'DELETE',
+        ...options,
+      }),
+    clear: <T = unknown>(options?: ApiRequestOptions) =>
+      apiFetch<T>('/cart/', {
+        method: 'DELETE',
+        ...options,
+      }),
+    applyPromo: <T = unknown>(code: string, options?: ApiRequestOptions) =>
+      apiFetch<T>('/cart/apply-promo', {
         method: 'POST',
-        token,
         body: JSON.stringify({ code }),
+        ...options,
       }),
   },
   orders: {
@@ -382,11 +402,12 @@ export const aruApi = {
       }),
   },
   wishlist: {
-    list: (token?: string) => apiFetch('/wishlist/', { token }),
-    add: (token: string | undefined, productId: number) =>
-      apiFetch(`/wishlist/${productId}`, { method: 'POST', token }),
-    remove: (token: string | undefined, productId: number) =>
-      apiFetch(`/wishlist/${productId}`, { method: 'DELETE', token }),
+    list: <T = unknown>(options?: ApiRequestOptions) =>
+      apiFetch<T>('/wishlist/', options),
+    add: <T = unknown>(productId: number, options?: ApiRequestOptions) =>
+      apiFetch<T>(`/wishlist/${productId}`, { method: 'POST', ...options }),
+    remove: <T = unknown>(productId: number, options?: ApiRequestOptions) =>
+      apiFetch<T>(`/wishlist/${productId}`, { method: 'DELETE', ...options }),
   },
   analytics: {
     trackEvent: (

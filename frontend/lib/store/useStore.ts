@@ -9,9 +9,13 @@ import {
   Product,
   ProductColorOption,
   ProductReview,
+  ServerCartSummary,
   UserProfile,
 } from '@/types'
-import { DEFAULT_ALUMINUM_FINISH } from '@/lib/data/catalog'
+import {
+  DEFAULT_ALUMINUM_FINISH,
+  isProductAvailable,
+} from '@/lib/data/catalog'
 import {
   ApiError,
   aruApi,
@@ -19,6 +23,19 @@ import {
   getInMemoryAccessToken,
   registerAuthSyncCallbacks,
 } from '@/lib/api/client'
+import {
+  addServerCartItem,
+  addServerWishlistItem,
+  applyServerCartPromo,
+  buildCartLineIdentityKey,
+  clearServerCart,
+  fetchServerCart,
+  fetchServerWishlist,
+  removeServerCartItem,
+  removeServerWishlistItem,
+  resolveValidatedProductOptions,
+  updateServerCartItemQuantity,
+} from '@/lib/api/cart'
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
 
@@ -31,6 +48,7 @@ export interface ToastMessage {
 
 const LEGACY_DEMO_ORDER_IDS = new Set(['ord-1001', 'ord-1002'])
 const LEGACY_DEMO_ORDER_NUMBERS = new Set(['ARU-84920', 'ARU-85104'])
+const LEGACY_MOCK_CART_ITEM_IDS = new Set(['1-silver-champagne-3-tier'])
 
 export function sanitizePersistedOrders(rawOrders: unknown): Order[] {
   if (!Array.isArray(rawOrders)) {
@@ -52,14 +70,55 @@ export function sanitizePersistedOrders(rawOrders: unknown): Order[] {
   })
 }
 
+export function sanitizePersistedGuestCart(rawCart: unknown): CartItemType[] {
+  if (!Array.isArray(rawCart)) {
+    return []
+  }
+  return rawCart.filter((entry): entry is CartItemType => {
+    if (!entry || typeof entry !== 'object') return false
+    const candidate = entry as Partial<CartItemType>
+    if (!candidate.id || LEGACY_MOCK_CART_ITEM_IDS.has(String(candidate.id))) {
+      return false
+    }
+    // Never hydrate server-owned cart items into guest storage
+    if (typeof candidate.serverItemId === 'number') {
+      return false
+    }
+    if (
+      !candidate.product ||
+      typeof candidate.product !== 'object' ||
+      typeof candidate.product.id !== 'number' ||
+      typeof candidate.quantity !== 'number' ||
+      candidate.quantity < 1
+    ) {
+      return false
+    }
+    return true
+  })
+}
+
+export function sanitizePersistedGuestWishlistIds(
+  rawIds: unknown
+): number[] {
+  if (!Array.isArray(rawIds)) {
+    return []
+  }
+  return Array.from(
+    new Set(
+      rawIds.filter(
+        (id): id is number =>
+          typeof id === 'number' && Number.isInteger(id) && id > 0
+      )
+    )
+  )
+}
+
 export interface PersistedAppSlice {
   locale: Locale
   hasSessionHint: boolean
-  cart: CartItemType[]
-  wishlistIds: number[]
+  guestCart: CartItemType[]
+  guestWishlistIds: number[]
   orders: Order[]
-  promoCode: string | null
-  promoPercent: number
 }
 
 export function migratePersistedStoreState(
@@ -70,6 +129,8 @@ export function migratePersistedStoreState(
     return {
       locale: 'fa',
       hasSessionHint: false,
+      guestCart: [],
+      guestWishlistIds: [],
       orders: [],
     }
   }
@@ -79,29 +140,25 @@ export function migratePersistedStoreState(
   const cleanedOrders = sanitizePersistedOrders(raw.orders)
 
   // Version < 2 may hold legacy demo admin state (`DEFAULT_USER`, `INITIAL_ORDERS`).
-  // Discard any persisted `user` / tokens / demo orders while preserving UI preferences.
-  const migrated: Partial<PersistedAppSlice> = {
+  // Version < 3 stored `cart` / `wishlistIds` directly rather than isolated `guestCart` / `guestWishlistIds`.
+  const migratedGuestCart = sanitizePersistedGuestCart(
+    version >= 3 ? raw.guestCart : raw.cart
+  )
+  const migratedGuestWishlist =
+    version >= 3 ? sanitizePersistedGuestWishlistIds(raw.guestWishlistIds) : []
+
+  return {
     locale: preservedLocale,
     hasSessionHint: version >= 2 ? Boolean(raw.hasSessionHint) : false,
+    guestCart: migratedGuestCart,
+    guestWishlistIds: migratedGuestWishlist,
     orders: cleanedOrders,
   }
+}
 
-  if (Array.isArray(raw.cart)) {
-    migrated.cart = raw.cart as CartItemType[]
-  }
-  if (Array.isArray(raw.wishlistIds)) {
-    migrated.wishlistIds = raw.wishlistIds.filter(
-      (id): id is number => typeof id === 'number'
-    )
-  }
-  if (typeof raw.promoCode === 'string' || raw.promoCode === null) {
-    migrated.promoCode = raw.promoCode
-  }
-  if (typeof raw.promoPercent === 'number') {
-    migrated.promoPercent = raw.promoPercent
-  }
-
-  return migrated
+export interface PromoApplyResult {
+  ok: boolean
+  error?: string
 }
 
 interface AppState {
@@ -118,27 +175,45 @@ interface AppState {
   toggleProductFeatured: (productId: number) => void
   updateProductStock: (productId: number, stock: number) => void
 
+  // Active effective cart view (`authCartSummary.items` when authenticated, `guestCart` when guest)
   cart: CartItemType[]
+  guestCart: CartItemType[]
+  authCartSummary: ServerCartSummary | null
+  authPromoCode: string | null
+  cartLoading: boolean
+  cartError: string | null
+  mergeError: string | null
+
   isCartDrawerOpen: boolean
   setCartDrawerOpen: (open: boolean) => void
+  loadServerCart: () => Promise<ServerCartSummary | null>
   addToCart: (
     product: Product,
     quantity?: number,
     color?: ProductColorOption,
     edition?: string
-  ) => void
-  removeFromCart: (itemId: string) => void
-  updateCartQuantity: (itemId: string, quantity: number) => void
-  clearCart: () => void
+  ) => Promise<boolean>
+  removeFromCart: (itemId: string) => Promise<boolean>
+  updateCartQuantity: (itemId: string, quantity: number) => Promise<boolean>
+  clearCart: () => Promise<boolean>
 
   promoCode: string | null
   promoPercent: number
-  applyPromoCode: (code: string) => boolean
-  removePromoCode: () => void
+  applyPromoCode: (code: string) => Promise<PromoApplyResult>
+  removePromoCode: () => Promise<void>
 
+  // Active effective wishlist view (`authWishlistIds` when authenticated, `guestWishlistIds` when guest)
   wishlistIds: number[]
-  toggleWishlist: (productId: number) => void
+  guestWishlistIds: number[]
+  authWishlistIds: number[]
+  authWishlistProducts: Product[]
+  wishlistLoading: boolean
+  wishlistError: string | null
+  loadServerWishlist: () => Promise<Product[]>
+  toggleWishlist: (productId: number, productHint?: Product) => Promise<boolean>
   isInWishlist: (productId: number) => boolean
+
+  syncAuthenticatedState: () => Promise<void>
 
   quickViewProduct: Product | null
   setQuickViewProduct: (product: Product | null) => void
@@ -172,6 +247,43 @@ interface AppState {
 }
 
 let inFlightBootstrap: Promise<UserProfile | null> | null = null
+let inFlightAccountSync: Promise<void> | null = null
+
+// Tracks computed target quantities per `${userId}::${lineKey}` so retried merges
+// after a network timeout never double-add guest quantities.
+const pendingMergeTargetQuantities = new Map<string, number>()
+
+// Prevents duplicate concurrent wishlist toggle requests per productId.
+const inFlightWishlistProductIds = new Set<number>()
+
+export function resetCartWishlistRuntimeLocks(): void {
+  inFlightAccountSync = null
+  pendingMergeTargetQuantities.clear()
+  inFlightWishlistProductIds.clear()
+}
+
+function extractMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.message) return err.message
+  if (err instanceof Error && err.message) return err.message
+  return fallback
+}
+
+function resolveNumericServerItemId(
+  items: CartItemType[],
+  itemId: string
+): number | null {
+  const matched = items.find(
+    (item) => item.id === itemId || String(item.serverItemId) === String(itemId)
+  )
+  if (matched && typeof matched.serverItemId === 'number') {
+    return matched.serverItemId
+  }
+  const parsed = Number(itemId)
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed
+  }
+  return null
+}
 
 export const useStore = create<AppState>()(
   persist(
@@ -206,7 +318,10 @@ export const useStore = create<AppState>()(
             const updatedReviews = [newReview, ...p.reviews]
             const newCount = p.rating_count + 1
             const newAvg = Number(
-              ((p.rating_avg * p.rating_count + reviewData.rating) / newCount).toFixed(2)
+              (
+                (p.rating_avg * p.rating_count + reviewData.rating) /
+                newCount
+              ).toFixed(2)
             )
             return {
               ...p,
@@ -226,103 +341,621 @@ export const useStore = create<AppState>()(
       updateProductStock: (productId, stock) =>
         set((state) => ({
           products: state.products.map((p) =>
-            p.id === productId ? { ...p, stock_quantity: Math.max(0, stock) } : p
+            p.id === productId
+              ? { ...p, stock_quantity: Math.max(0, stock) }
+              : p
           ),
         })),
 
       cart: [],
+      guestCart: [],
+      authCartSummary: null,
+      authPromoCode: null,
+      cartLoading: false,
+      cartError: null,
+      mergeError: null,
+
       isCartDrawerOpen: false,
       setCartDrawerOpen: (open) => set({ isCartDrawerOpen: open }),
 
-      addToCart: (product, quantity = 1, color, edition) => {
-        const chosenColor = color || product.colors[0] || DEFAULT_ALUMINUM_FINISH
-        const chosenEdition = edition || product.editions?.[0]?.id || 'default'
-        const itemId = `${product.id}-${chosenColor.id}-${chosenEdition}`
-
-        set((state) => {
-          const existing = state.cart.find((item) => item.id === itemId)
-          if (existing) {
-            return {
-              cart: state.cart.map((item) =>
-                item.id === itemId
-                  ? { ...item, quantity: item.quantity + quantity }
-                  : item
-              ),
-              isCartDrawerOpen: true,
+      loadServerCart: async () => {
+        const { user, authPromoCode } = get()
+        if (!user || !getInMemoryAccessToken()) {
+          return null
+        }
+        set({ cartLoading: true, cartError: null })
+        try {
+          let summary: ServerCartSummary
+          try {
+            summary = await fetchServerCart(authPromoCode)
+          } catch (promoErr) {
+            if (authPromoCode && promoErr instanceof ApiError && promoErr.status < 500) {
+              set({ authPromoCode: null, promoCode: null, promoPercent: 0 })
+              summary = await fetchServerCart(null)
+            } else {
+              throw promoErr
             }
           }
-          return {
-            cart: [
-              ...state.cart,
-              {
-                id: itemId,
-                product,
-                quantity,
-                selectedColor: chosenColor,
-                selectedEdition: chosenEdition,
-              },
-            ],
-            isCartDrawerOpen: true,
+          get().upsertCatalogProducts(summary.items.map((i) => i.product))
+          set({
+            authCartSummary: summary,
+            cart: summary.items,
+            promoCode: summary.promoCode,
+            promoPercent: summary.promoPercent,
+            cartLoading: false,
+            cartError: null,
+          })
+          return summary
+        } catch (err) {
+          const msg = extractMessage(err, 'Unable to load cart')
+          set({ cartLoading: false, cartError: msg })
+          return null
+        }
+      },
+
+      addToCart: async (product, quantity = 1, color, edition) => {
+        const locale = get().locale
+        if (!Number.isInteger(quantity) || quantity < 1) {
+          const msg =
+            locale === 'fa' ? 'تعداد نامعتبر است' : 'Invalid quantity'
+          set({ cartError: msg })
+          get().pushToast({ title: msg, type: 'error' })
+          return false
+        }
+
+        let validatedOptions: ReturnType<typeof resolveValidatedProductOptions>
+        try {
+          validatedOptions = resolveValidatedProductOptions(
+            product,
+            color,
+            edition
+          )
+        } catch (optErr) {
+          const msg = extractMessage(optErr, 'Invalid product options')
+          set({ cartError: msg })
+          get().pushToast({ title: msg, type: 'error' })
+          return false
+        }
+
+        // Authenticated Path — Backend is strictly authoritative
+        if (get().user && getInMemoryAccessToken()) {
+          set({ cartLoading: true, cartError: null })
+          try {
+            let summary = await addServerCartItem({
+              product_id: product.id,
+              quantity,
+              selected_color: validatedOptions.colorPayload,
+              selected_edition: validatedOptions.edition ?? null,
+            })
+
+            const activePromo = get().authPromoCode
+            if (activePromo && summary.itemCount > 0) {
+              try {
+                summary = await fetchServerCart(activePromo)
+              } catch {
+                set({ authPromoCode: null })
+              }
+            }
+
+            get().upsertCatalogProducts(summary.items.map((i) => i.product))
+            set({
+              authCartSummary: summary,
+              cart: summary.items,
+              promoCode: summary.promoCode,
+              promoPercent: summary.promoPercent,
+              isCartDrawerOpen: true,
+              cartLoading: false,
+              cartError: null,
+            })
+            get().pushToast({
+              title:
+                locale === 'fa'
+                  ? `${product.name_fa} به سبد خرید اضافه شد`
+                  : `${product.name} added to bag`,
+              description:
+                locale === 'fa'
+                  ? validatedOptions.color.name_fa
+                  : validatedOptions.color.name,
+              type: 'success',
+            })
+            return true
+          } catch (err) {
+            const msg = extractMessage(
+              err,
+              locale === 'fa'
+                ? 'امکان افزودن محصول به سبد خرید وجود ندارد'
+                : 'Unable to add item to bag'
+            )
+            set({ cartLoading: false, cartError: msg })
+            get().pushToast({ title: msg, type: 'error' })
+            return false
           }
+        }
+
+        // Guest Path — Validate availability & cumulative stock against backend-loaded product
+        if (!isProductAvailable(product)) {
+          const msg =
+            locale === 'fa'
+              ? 'این محصول در حال حاضر ناموجود است'
+              : 'This product is currently out of stock'
+          set({ cartError: msg })
+          get().pushToast({ title: msg, type: 'error' })
+          return false
+        }
+
+        const currentGuest = get().guestCart
+        const existingProductTotal = currentGuest
+          .filter((item) => item.product.id === product.id)
+          .reduce((acc, item) => acc + item.quantity, 0)
+
+        if (existingProductTotal + quantity > product.stock_quantity) {
+          const msg =
+            locale === 'fa'
+              ? `تعداد درخواستی بیشتر از موجودی انبار (${product.stock_quantity} عدد) است`
+              : `Requested quantity exceeds available stock (${product.stock_quantity} available)`
+          set({ cartError: msg })
+          get().pushToast({ title: msg, type: 'error' })
+          return false
+        }
+
+        const lineKey = buildCartLineIdentityKey(
+          product,
+          validatedOptions.color,
+          validatedOptions.edition
+        )
+
+        const nextGuestCart = (() => {
+          const existingIdx = currentGuest.findIndex(
+            (item) =>
+              buildCartLineIdentityKey(
+                item.product,
+                item.selectedColor,
+                item.selectedEdition
+              ) === lineKey
+          )
+          if (existingIdx >= 0) {
+            return currentGuest.map((item, idx) =>
+              idx === existingIdx
+                ? {
+                    ...item,
+                    product,
+                    quantity: item.quantity + quantity,
+                  }
+                : item
+            )
+          }
+          return [
+            ...currentGuest,
+            {
+              id: `guest::${lineKey}`,
+              product,
+              quantity,
+              selectedColor: validatedOptions.color,
+              selectedEdition: validatedOptions.edition,
+            },
+          ]
+        })()
+
+        set({
+          guestCart: nextGuestCart,
+          cart: nextGuestCart,
+          isCartDrawerOpen: true,
+          cartError: null,
         })
 
-        const locale = get().locale
         get().pushToast({
           title:
             locale === 'fa'
               ? `${product.name_fa} به سبد خرید اضافه شد`
               : `${product.name} added to bag`,
           description:
-            locale === 'fa' ? chosenColor.name_fa : chosenColor.name,
+            locale === 'fa'
+              ? validatedOptions.color.name_fa
+              : validatedOptions.color.name,
           type: 'success',
         })
+        return true
       },
 
-      removeFromCart: (itemId) =>
-        set((state) => ({
-          cart: state.cart.filter((item) => item.id !== itemId),
-        })),
+      updateCartQuantity: async (itemId, quantity) => {
+        const locale = get().locale
+        if (!Number.isInteger(quantity) || quantity < 0) {
+          const msg =
+            locale === 'fa' ? 'تعداد نامعتبر است' : 'Invalid quantity'
+          set({ cartError: msg })
+          get().pushToast({ title: msg, type: 'error' })
+          return false
+        }
 
-      updateCartQuantity: (itemId, quantity) =>
-        set((state) => ({
-          cart:
-            quantity <= 0
-              ? state.cart.filter((item) => item.id !== itemId)
-              : state.cart.map((item) =>
-                  item.id === itemId ? { ...item, quantity } : item
-                ),
-        })),
+        // Authenticated Path
+        if (get().user && getInMemoryAccessToken()) {
+          const currentItems = get().authCartSummary?.items || []
+          const serverItemId = resolveNumericServerItemId(currentItems, itemId)
+          if (!serverItemId) {
+            const msg =
+              locale === 'fa'
+                ? 'آیتم سبد خرید یافت نشد'
+                : 'Cart item not found'
+            set({ cartError: msg })
+            return false
+          }
 
-      clearCart: () => set({ cart: [], promoCode: null, promoPercent: 0 }),
+          set({ cartLoading: true, cartError: null })
+          try {
+            let summary = await updateServerCartItemQuantity(
+              serverItemId,
+              quantity
+            )
+            const activePromo = get().authPromoCode
+            if (activePromo) {
+              if (summary.itemCount === 0) {
+                set({ authPromoCode: null })
+              } else {
+                try {
+                  summary = await fetchServerCart(activePromo)
+                } catch {
+                  set({ authPromoCode: null })
+                }
+              }
+            }
+
+            get().upsertCatalogProducts(summary.items.map((i) => i.product))
+            set({
+              authCartSummary: summary,
+              cart: summary.items,
+              promoCode: summary.promoCode,
+              promoPercent: summary.promoPercent,
+              cartLoading: false,
+              cartError: null,
+            })
+            return true
+          } catch (err) {
+            const msg = extractMessage(
+              err,
+              locale === 'fa'
+                ? 'خطا در بروزرسانی تعداد محصول'
+                : 'Unable to update quantity'
+            )
+            set({ cartLoading: false, cartError: msg })
+            get().pushToast({ title: msg, type: 'error' })
+            return false
+          }
+        }
+
+        // Guest Path
+        const currentGuest = get().guestCart
+        const target = currentGuest.find((item) => item.id === itemId)
+        if (!target) {
+          return false
+        }
+
+        if (quantity === 0) {
+          const nextGuest = currentGuest.filter((item) => item.id !== itemId)
+          set({ guestCart: nextGuest, cart: nextGuest, cartError: null })
+          return true
+        }
+
+        if (!isProductAvailable(target.product)) {
+          const msg =
+            locale === 'fa'
+              ? 'این محصول ناموجود شده است'
+              : 'This product is no longer in stock'
+          set({ cartError: msg })
+          get().pushToast({ title: msg, type: 'error' })
+          return false
+        }
+
+        const otherLinesQty = currentGuest
+          .filter(
+            (item) =>
+              item.product.id === target.product.id && item.id !== target.id
+          )
+          .reduce((acc, item) => acc + item.quantity, 0)
+
+        if (otherLinesQty + quantity > target.product.stock_quantity) {
+          const msg =
+            locale === 'fa'
+              ? `تعداد درخواستی بیشتر از موجودی انبار (${target.product.stock_quantity} عدد) است`
+              : `Requested quantity exceeds available stock (${target.product.stock_quantity} available)`
+          set({ cartError: msg })
+          get().pushToast({ title: msg, type: 'error' })
+          return false
+        }
+
+        const nextGuest = currentGuest.map((item) =>
+          item.id === itemId ? { ...item, quantity } : item
+        )
+        set({ guestCart: nextGuest, cart: nextGuest, cartError: null })
+        return true
+      },
+
+      removeFromCart: async (itemId) => {
+        const locale = get().locale
+        if (get().user && getInMemoryAccessToken()) {
+          const currentItems = get().authCartSummary?.items || []
+          const serverItemId = resolveNumericServerItemId(currentItems, itemId)
+          if (!serverItemId) {
+            return false
+          }
+
+          set({ cartLoading: true, cartError: null })
+          try {
+            let summary = await removeServerCartItem(serverItemId)
+            const activePromo = get().authPromoCode
+            if (activePromo) {
+              if (summary.itemCount === 0) {
+                set({ authPromoCode: null })
+              } else {
+                try {
+                  summary = await fetchServerCart(activePromo)
+                } catch {
+                  set({ authPromoCode: null })
+                }
+              }
+            }
+            get().upsertCatalogProducts(summary.items.map((i) => i.product))
+            set({
+              authCartSummary: summary,
+              cart: summary.items,
+              promoCode: summary.promoCode,
+              promoPercent: summary.promoPercent,
+              cartLoading: false,
+              cartError: null,
+            })
+            return true
+          } catch (err) {
+            const msg = extractMessage(
+              err,
+              locale === 'fa'
+                ? 'خطا در حذف آیتم از سبد خرید'
+                : 'Unable to remove item'
+            )
+            set({ cartLoading: false, cartError: msg })
+            get().pushToast({ title: msg, type: 'error' })
+            return false
+          }
+        }
+
+        const nextGuest = get().guestCart.filter((item) => item.id !== itemId)
+        set({ guestCart: nextGuest, cart: nextGuest, cartError: null })
+        return true
+      },
+
+      clearCart: async () => {
+        const locale = get().locale
+        if (get().user && getInMemoryAccessToken()) {
+          set({ cartLoading: true, cartError: null })
+          try {
+            await clearServerCart()
+            set({ authPromoCode: null })
+            const emptySummary = await fetchServerCart(null)
+            set({
+              authCartSummary: emptySummary,
+              cart: emptySummary.items,
+              promoCode: null,
+              promoPercent: 0,
+              cartLoading: false,
+              cartError: null,
+            })
+            return true
+          } catch (err) {
+            const msg = extractMessage(
+              err,
+              locale === 'fa'
+                ? 'خطا در خالی کردن سبد خرید'
+                : 'Unable to clear bag'
+            )
+            set({ cartLoading: false, cartError: msg })
+            get().pushToast({ title: msg, type: 'error' })
+            return false
+          }
+        }
+
+        set({
+          guestCart: [],
+          cart: [],
+          promoCode: null,
+          promoPercent: 0,
+          cartError: null,
+        })
+        return true
+      },
 
       promoCode: null,
       promoPercent: 0,
-      applyPromoCode: (code) => {
-        const normalized = code.trim().toUpperCase()
-        const validCodes: Record<string, number> = {
-          ARU3D: 15,
-          VIP20: 20,
-          WELCOME10: 10,
-        }
-        if (validCodes[normalized]) {
-          set({ promoCode: normalized, promoPercent: validCodes[normalized] })
-          return true
-        }
-        return false
-      },
-      removePromoCode: () => set({ promoCode: null, promoPercent: 0 }),
 
-      wishlistIds: [2, 4],
-      toggleWishlist: (productId) => {
-        const exists = get().wishlistIds.includes(productId)
-        const product = get().products.find((p) => p.id === productId)
-        set((state) => ({
-          wishlistIds: exists
-            ? state.wishlistIds.filter((id) => id !== productId)
-            : [...state.wishlistIds, productId],
-        }))
-        if (product) {
-          const locale = get().locale
+      applyPromoCode: async (code) => {
+        const locale = get().locale
+        const trimmed = code.trim()
+        if (!trimmed) {
+          return {
+            ok: false,
+            error:
+              locale === 'fa'
+                ? 'کد تخفیف را وارد کنید'
+                : 'Please enter a promo code',
+          }
+        }
+
+        // Never fake-validate guest promo codes on the client
+        if (!get().user || !getInMemoryAccessToken()) {
+          const msg =
+            locale === 'fa'
+              ? 'برای بررسی و اعمال کد تخفیف، لطفاً وارد حساب کاربری شوید'
+              : 'Please sign in to validate and apply a promo code'
+          set({ cartError: msg })
+          return { ok: false, error: msg }
+        }
+
+        set({ cartLoading: true, cartError: null })
+        try {
+          const summary = await applyServerCartPromo(trimmed)
+          get().upsertCatalogProducts(summary.items.map((i) => i.product))
+          set({
+            authPromoCode: summary.promoCode,
+            authCartSummary: summary,
+            cart: summary.items,
+            promoCode: summary.promoCode,
+            promoPercent: summary.promoPercent,
+            cartLoading: false,
+            cartError: null,
+          })
+          return { ok: true }
+        } catch (err) {
+          // Preserve current cart intact when promo validation fails
+          const msg = extractMessage(
+            err,
+            locale === 'fa' ? 'کد تخفیف معتبر نیست' : 'Invalid promo code'
+          )
+          set({ cartLoading: false, cartError: msg })
+          return { ok: false, error: msg }
+        }
+      },
+
+      removePromoCode: async () => {
+        set({
+          authPromoCode: null,
+          promoCode: null,
+          promoPercent: 0,
+          cartError: null,
+        })
+        if (get().user && getInMemoryAccessToken()) {
+          set({ cartLoading: true })
+          try {
+            const summary = await fetchServerCart(null)
+            set({
+              authCartSummary: summary,
+              cart: summary.items,
+              promoCode: summary.promoCode,
+              promoPercent: summary.promoPercent,
+              cartLoading: false,
+            })
+          } catch (err) {
+            set({
+              cartLoading: false,
+              cartError: extractMessage(err, 'Unable to recalculate cart'),
+            })
+          }
+        }
+      },
+
+      wishlistIds: [],
+      guestWishlistIds: [],
+      authWishlistIds: [],
+      authWishlistProducts: [],
+      wishlistLoading: false,
+      wishlistError: null,
+
+      loadServerWishlist: async () => {
+        if (!get().user || !getInMemoryAccessToken()) {
+          return []
+        }
+        set({ wishlistLoading: true, wishlistError: null })
+        try {
+          const items = await fetchServerWishlist()
+          const ids = items.map((p) => p.id)
+          get().upsertCatalogProducts(items)
+          set({
+            authWishlistProducts: items,
+            authWishlistIds: ids,
+            wishlistIds: ids,
+            wishlistLoading: false,
+            wishlistError: null,
+          })
+          return items
+        } catch (err) {
+          const msg = extractMessage(err, 'Unable to load wishlist')
+          set({ wishlistLoading: false, wishlistError: msg })
+          return []
+        }
+      },
+
+      toggleWishlist: async (productId, productHint) => {
+        if (!Number.isInteger(productId) || productId <= 0) {
+          return false
+        }
+        if (inFlightWishlistProductIds.has(productId)) {
+          return false
+        }
+
+        const locale = get().locale
+        const knownProduct =
+          productHint || get().products.find((p) => p.id === productId)
+
+        // Authenticated Path — Server-backed wishlist
+        if (get().user && getInMemoryAccessToken()) {
+          inFlightWishlistProductIds.add(productId)
+          set({ wishlistLoading: true, wishlistError: null })
+          const currentlySaved = get().authWishlistIds.includes(productId)
+          try {
+            if (currentlySaved) {
+              try {
+                await removeServerWishlistItem(productId)
+              } catch (remErr) {
+                if (!(remErr instanceof ApiError && remErr.status === 404)) {
+                  throw remErr
+                }
+              }
+            } else {
+              await addServerWishlistItem(productId)
+            }
+
+            const freshItems = await fetchServerWishlist()
+            const freshIds = freshItems.map((p) => p.id)
+            get().upsertCatalogProducts(freshItems)
+            set({
+              authWishlistProducts: freshItems,
+              authWishlistIds: freshIds,
+              wishlistIds: freshIds,
+              wishlistLoading: false,
+              wishlistError: null,
+            })
+
+            const displayProduct =
+              knownProduct || freshItems.find((p) => p.id === productId)
+            get().pushToast({
+              title: currentlySaved
+                ? locale === 'fa'
+                  ? 'از لیست علاقه‌مندی‌ها حذف شد'
+                  : 'Removed from wishlist'
+                : locale === 'fa'
+                ? 'به لیست علاقه‌مندی‌ها اضافه شد'
+                : 'Saved to wishlist',
+              description: displayProduct
+                ? locale === 'fa'
+                  ? displayProduct.name_fa
+                  : displayProduct.name
+                : undefined,
+              type: 'info',
+            })
+            return true
+          } catch (err) {
+            const msg = extractMessage(
+              err,
+              locale === 'fa'
+                ? 'خطا در بروزرسانی لیست علاقه‌مندی‌ها'
+                : 'Unable to update wishlist'
+            )
+            set({ wishlistLoading: false, wishlistError: msg })
+            get().pushToast({ title: msg, type: 'error' })
+            return false
+          } finally {
+            inFlightWishlistProductIds.delete(productId)
+          }
+        }
+
+        // Guest Path — Local guest wishlist
+        const exists = get().guestWishlistIds.includes(productId)
+        const nextIds = exists
+          ? get().guestWishlistIds.filter((id) => id !== productId)
+          : [...get().guestWishlistIds, productId]
+
+        set({
+          guestWishlistIds: nextIds,
+          wishlistIds: nextIds,
+          wishlistError: null,
+        })
+        if (knownProduct) {
           get().pushToast({
             title: exists
               ? locale === 'fa'
@@ -331,58 +964,273 @@ export const useStore = create<AppState>()(
               : locale === 'fa'
               ? 'به لیست علاقه‌مندی‌ها اضافه شد'
               : 'Saved to wishlist',
-            description: locale === 'fa' ? product.name_fa : product.name,
+            description:
+              locale === 'fa' ? knownProduct.name_fa : knownProduct.name,
             type: 'info',
           })
         }
+        return true
       },
+
       isInWishlist: (productId) => get().wishlistIds.includes(productId),
+
+      syncAuthenticatedState: async () => {
+        if (inFlightAccountSync) {
+          return inFlightAccountSync
+        }
+
+        const currentUser = get().user
+        if (!currentUser || !getInMemoryAccessToken()) {
+          return
+        }
+
+        inFlightAccountSync = (async () => {
+          set({
+            cartLoading: true,
+            wishlistLoading: true,
+            cartError: null,
+            wishlistError: null,
+            mergeError: null,
+          })
+
+          const mergeWarnings: string[] = []
+          let serverCart: ServerCartSummary | null = null
+          let serverWishlist: Product[] | null = null
+
+          // 1. Load current server cart & server wishlist
+          try {
+            serverCart = await fetchServerCart(get().authPromoCode)
+          } catch (err) {
+            if (
+              get().authPromoCode &&
+              err instanceof ApiError &&
+              err.status < 500
+            ) {
+              set({ authPromoCode: null, promoCode: null, promoPercent: 0 })
+              try {
+                serverCart = await fetchServerCart(null)
+              } catch (innerErr) {
+                set({
+                  cartError: extractMessage(innerErr, 'Unable to load cart'),
+                })
+              }
+            } else {
+              set({ cartError: extractMessage(err, 'Unable to load cart') })
+            }
+          }
+
+          try {
+            serverWishlist = await fetchServerWishlist()
+          } catch (err) {
+            set({
+              wishlistError: extractMessage(
+                err,
+                'Unable to load wishlist'
+              ),
+            })
+          }
+
+          // 2. Idempotent Guest Cart Merge (only if serverCart baseline was loaded)
+          if (serverCart && get().guestCart.length > 0) {
+            const snapshotGuestCart = [...get().guestCart]
+            let mutatedCart = false
+
+            for (const guestItem of snapshotGuestCart) {
+              const lineKey = buildCartLineIdentityKey(
+                guestItem.product,
+                guestItem.selectedColor,
+                guestItem.selectedEdition
+              )
+              const targetMapKey = `${currentUser.id}::${lineKey}`
+
+              const existingServerItem = serverCart.items.find(
+                (si) =>
+                  buildCartLineIdentityKey(
+                    si.product,
+                    si.selectedColor,
+                    si.selectedEdition
+                  ) === lineKey
+              )
+
+              let targetQty = pendingMergeTargetQuantities.get(targetMapKey)
+              if (targetQty === undefined) {
+                targetQty =
+                  (existingServerItem ? existingServerItem.quantity : 0) +
+                  guestItem.quantity
+                pendingMergeTargetQuantities.set(targetMapKey, targetQty)
+              }
+
+              try {
+                if (existingServerItem && existingServerItem.serverItemId) {
+                  if (existingServerItem.quantity !== targetQty) {
+                    serverCart = await updateServerCartItemQuantity(
+                      existingServerItem.serverItemId,
+                      targetQty
+                    )
+                    mutatedCart = true
+                  }
+                } else {
+                  const colorPayload =
+                    guestItem.selectedColor &&
+                    guestItem.selectedColor.id !== DEFAULT_ALUMINUM_FINISH.id
+                      ? {
+                          id: guestItem.selectedColor.id,
+                          name: guestItem.selectedColor.name,
+                          name_fa: guestItem.selectedColor.name_fa,
+                          hex: guestItem.selectedColor.hex,
+                          accentHex: guestItem.selectedColor.accentHex,
+                        }
+                      : null
+
+                  serverCart = await addServerCartItem({
+                    product_id: guestItem.product.id,
+                    quantity: targetQty,
+                    selected_color: colorPayload,
+                    selected_edition:
+                      guestItem.selectedEdition === 'default'
+                        ? null
+                        : guestItem.selectedEdition ?? null,
+                  })
+                  mutatedCart = true
+                }
+
+                // Confirmed on server: remove ONLY this guest cart entry
+                pendingMergeTargetQuantities.delete(targetMapKey)
+                set((state) => ({
+                  guestCart: state.guestCart.filter(
+                    (g) => g.id !== guestItem.id
+                  ),
+                }))
+              } catch (mergeErr) {
+                // Deterministic 4xx validation error means server did NOT commit;
+                // clear cached target so future edits recalculate cleanly, while preserving guest item!
+                if (
+                  mergeErr instanceof ApiError &&
+                  mergeErr.status >= 400 &&
+                  mergeErr.status < 500
+                ) {
+                  pendingMergeTargetQuantities.delete(targetMapKey)
+                }
+                mergeWarnings.push(
+                  extractMessage(
+                    mergeErr,
+                    `Could not merge ${guestItem.product.name}`
+                  )
+                )
+              }
+            }
+
+            // Reload authoritative server cart after mutations
+            if (mutatedCart) {
+              try {
+                serverCart = await fetchServerCart(get().authPromoCode)
+              } catch {
+                // Keep latest `serverCart` returned by last successful mutation if reload fails
+              }
+            }
+          }
+
+          // 3. Idempotent Guest Wishlist Merge (only if serverWishlist baseline was loaded)
+          if (serverWishlist && get().guestWishlistIds.length > 0) {
+            const existingWishSet = new Set(serverWishlist.map((p) => p.id))
+            const snapshotWishIds = [...get().guestWishlistIds]
+            let mutatedWishlist = false
+
+            for (const prodId of snapshotWishIds) {
+              try {
+                if (!existingWishSet.has(prodId)) {
+                  await addServerWishlistItem(prodId)
+                  mutatedWishlist = true
+                }
+                set((state) => ({
+                  guestWishlistIds: state.guestWishlistIds.filter(
+                    (id) => id !== prodId
+                  ),
+                }))
+              } catch (wishErr) {
+                mergeWarnings.push(
+                  extractMessage(
+                    wishErr,
+                    `Could not merge wishlist item #${prodId}`
+                  )
+                )
+              }
+            }
+
+            if (mutatedWishlist) {
+              try {
+                serverWishlist = await fetchServerWishlist()
+              } catch {
+                // Preserve baseline if reload fails
+              }
+            }
+          }
+
+          // 4. Commit authoritative server state if user is still authenticated
+          if (!get().user || get().user?.id !== currentUser.id) {
+            set({ cartLoading: false, wishlistLoading: false })
+            return
+          }
+
+          const catalogBatch: Product[] = []
+          if (serverCart) {
+            catalogBatch.push(...serverCart.items.map((i) => i.product))
+          }
+          if (serverWishlist) {
+            catalogBatch.push(...serverWishlist)
+          }
+          if (catalogBatch.length > 0) {
+            get().upsertCatalogProducts(catalogBatch)
+          }
+
+          set((state) => ({
+            authCartSummary: serverCart ?? state.authCartSummary,
+            cart: serverCart ? serverCart.items : state.authCartSummary?.items || [],
+            promoCode: serverCart ? serverCart.promoCode : state.promoCode,
+            promoPercent: serverCart
+              ? serverCart.promoPercent
+              : state.promoPercent,
+            authWishlistProducts: serverWishlist ?? state.authWishlistProducts,
+            authWishlistIds: serverWishlist
+              ? serverWishlist.map((p) => p.id)
+              : state.authWishlistIds,
+            wishlistIds: serverWishlist
+              ? serverWishlist.map((p) => p.id)
+              : state.authWishlistIds,
+            cartLoading: false,
+            wishlistLoading: false,
+            mergeError:
+              mergeWarnings.length > 0 ? mergeWarnings.join(' • ') : null,
+          }))
+
+          if (mergeWarnings.length > 0) {
+            const locale = get().locale
+            get().pushToast({
+              title:
+                locale === 'fa'
+                  ? 'برخی اقلام مهمان به دلیل محدودیت موجودی منتقل نشدند'
+                  : 'Some guest items could not be merged',
+              description: mergeWarnings[0],
+              type: 'error',
+            })
+          }
+        })()
+
+        try {
+          await inFlightAccountSync
+        } finally {
+          inFlightAccountSync = null
+        }
+      },
 
       quickViewProduct: null,
       setQuickViewProduct: (product) => set({ quickViewProduct: product }),
 
       orders: [],
-      placeOrder: ({ customerName, shippingAddress }) => {
-        const { cart, promoPercent, orders } = get()
-        const factor = (100 - promoPercent) / 100
-        const subtotalUsd = cart.reduce((acc, item) => {
-          const ed = item.product.editions?.find((e) => e.id === item.selectedEdition)
-          return acc + (item.product.price + (ed?.priceDelta || 0)) * item.quantity
-        }, 0)
-        const subtotalToman = cart.reduce((acc, item) => {
-          const ed = item.product.editions?.find((e) => e.id === item.selectedEdition)
-          return acc + (item.product.price_toman + (ed?.priceDeltaToman || 0)) * item.quantity
-        }, 0)
-
-        const newOrder: Order = {
-          id: `ord-${Date.now()}`,
-          orderNumber: `ARU-${Math.floor(86000 + Math.random() * 9000)}`,
-          createdAt: new Date().toISOString().slice(0, 10),
-          status: 'processing',
-          total: Math.round(subtotalUsd * factor),
-          total_toman: Math.round(subtotalToman * factor),
-          shippingAddress,
-          customerName,
-          items: cart.map((item) => ({
-            productId: item.product.id,
-            name: item.product.name,
-            name_fa: item.product.name_fa,
-            image: item.product.images[0]?.url || '/images/products/tiered-stand.png',
-            quantity: item.quantity,
-            price: item.product.price,
-            price_toman: item.product.price_toman,
-            colorName: item.selectedColor.name,
-            colorName_fa: item.selectedColor.name_fa,
-          })),
-        }
-
-        set({
-          orders: [newOrder, ...orders],
-          cart: [],
-          promoCode: null,
-          promoPercent: 0,
-        })
-        return newOrder
+      placeOrder: () => {
+        throw new Error(
+          'Simulated client-side order placement is disabled; backend checkout integration is pending.'
+        )
       },
       updateOrderStatus: (orderId, status) =>
         set((state) => ({
@@ -404,14 +1252,21 @@ export const useStore = create<AppState>()(
             authStatus: 'authenticated',
             hasSessionHint: true,
           })
+          await get().syncAuthenticatedState()
           return user
         } catch (err) {
           clearInMemoryAccessToken()
-          set({
+          set((state) => ({
             user: null,
             authStatus: 'unauthenticated',
             hasSessionHint: false,
-          })
+            authCartSummary: null,
+            authPromoCode: null,
+            authWishlistProducts: [],
+            authWishlistIds: [],
+            cart: state.guestCart,
+            wishlistIds: state.guestWishlistIds,
+          }))
           throw err
         }
       },
@@ -425,24 +1280,46 @@ export const useStore = create<AppState>()(
             authStatus: 'authenticated',
             hasSessionHint: true,
           })
+          await get().syncAuthenticatedState()
           return user
         } catch (err) {
           clearInMemoryAccessToken()
-          set({
+          set((state) => ({
             user: null,
             authStatus: 'unauthenticated',
             hasSessionHint: false,
-          })
+            authCartSummary: null,
+            authPromoCode: null,
+            authWishlistProducts: [],
+            authWishlistIds: [],
+            cart: state.guestCart,
+            wishlistIds: state.guestWishlistIds,
+          }))
           throw err
         }
       },
 
       logoutUser: async () => {
         await aruApi.auth.logout()
+        pendingMergeTargetQuantities.clear()
+        inFlightWishlistProductIds.clear()
         set({
           user: null,
           authStatus: 'unauthenticated',
           hasSessionHint: false,
+          authCartSummary: null,
+          authPromoCode: null,
+          authWishlistProducts: [],
+          authWishlistIds: [],
+          guestCart: [],
+          guestWishlistIds: [],
+          cart: [],
+          wishlistIds: [],
+          promoCode: null,
+          promoPercent: 0,
+          cartError: null,
+          wishlistError: null,
+          mergeError: null,
         })
       },
 
@@ -456,11 +1333,19 @@ export const useStore = create<AppState>()(
           if (authStatus !== 'authenticated') {
             set({ authStatus: 'authenticated' })
           }
+          if (!get().authCartSummary) {
+            await get().syncAuthenticatedState()
+          }
           return user
         }
 
         if (!forceServerCheck && !hasSessionHint && !getInMemoryAccessToken()) {
-          set({ user: null, authStatus: 'unauthenticated' })
+          set((state) => ({
+            user: null,
+            authStatus: 'unauthenticated',
+            cart: state.guestCart,
+            wishlistIds: state.guestWishlistIds,
+          }))
           return null
         }
 
@@ -474,6 +1359,7 @@ export const useStore = create<AppState>()(
                 authStatus: 'authenticated',
                 hasSessionHint: true,
               })
+              await get().syncAuthenticatedState()
               return verified
             }
 
@@ -484,22 +1370,35 @@ export const useStore = create<AppState>()(
                 authStatus: 'authenticated',
                 hasSessionHint: true,
               })
+              await get().syncAuthenticatedState()
               return refreshed
             }
 
-            set({
+            set((state) => ({
               user: null,
               authStatus: 'unauthenticated',
               hasSessionHint: false,
-            })
+              authCartSummary: null,
+              authPromoCode: null,
+              authWishlistProducts: [],
+              authWishlistIds: [],
+              cart: state.guestCart,
+              wishlistIds: state.guestWishlistIds,
+            }))
             return null
           } catch {
             clearInMemoryAccessToken()
-            set({
+            set((state) => ({
               user: null,
               authStatus: 'unauthenticated',
               hasSessionHint: false,
-            })
+              authCartSummary: null,
+              authPromoCode: null,
+              authWishlistProducts: [],
+              authWishlistIds: [],
+              cart: state.guestCart,
+              wishlistIds: state.guestWishlistIds,
+            }))
             return null
           } finally {
             inFlightBootstrap = null
@@ -515,11 +1414,16 @@ export const useStore = create<AppState>()(
           if (!getInMemoryAccessToken()) {
             const refreshed = await aruApi.auth.refresh()
             if (!refreshed || !getInMemoryAccessToken()) {
-              set({
+              set((state) => ({
                 user: null,
                 authStatus: 'unauthenticated',
                 hasSessionHint: false,
-              })
+                authCartSummary: null,
+                authWishlistProducts: [],
+                authWishlistIds: [],
+                cart: state.guestCart,
+                wishlistIds: state.guestWishlistIds,
+              }))
               return 'unauthenticated'
             }
           }
@@ -537,11 +1441,16 @@ export const useStore = create<AppState>()(
             return 'forbidden'
           }
           clearInMemoryAccessToken()
-          set({
+          set((state) => ({
             user: null,
             authStatus: 'unauthenticated',
             hasSessionHint: false,
-          })
+            authCartSummary: null,
+            authWishlistProducts: [],
+            authWishlistIds: [],
+            cart: state.guestCart,
+            wishlistIds: state.guestWishlistIds,
+          }))
           return 'unauthenticated'
         }
       },
@@ -549,7 +1458,9 @@ export const useStore = create<AppState>()(
       toasts: [],
       pushToast: (toast) => {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-        set((state) => ({ toasts: [...state.toasts.slice(-3), { ...toast, id }] }))
+        set((state) => ({
+          toasts: [...state.toasts.slice(-3), { ...toast, id }],
+        }))
         setTimeout(() => {
           set((state) => ({
             toasts: state.toasts.filter((t) => t.id !== id),
@@ -563,47 +1474,45 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'arustore-aluminum-v3',
-      version: 2,
+      version: 3,
       migrate: (persistedState, version) =>
         migratePersistedStoreState(persistedState, version),
       partialize: (state): PersistedAppSlice => ({
         locale: state.locale,
         hasSessionHint: state.hasSessionHint,
-        cart: state.cart,
-        wishlistIds: state.wishlistIds,
+        guestCart: state.guestCart,
+        guestWishlistIds: state.guestWishlistIds,
         orders: state.orders,
-        promoCode: state.promoCode,
-        promoPercent: state.promoPercent,
       }),
       merge: (persistedState, currentState) => {
         const raw =
           persistedState && typeof persistedState === 'object'
             ? (persistedState as Record<string, unknown>)
             : {}
+        const hydratedGuestCart = sanitizePersistedGuestCart(
+          raw.guestCart ?? raw.cart
+        )
+        const hydratedGuestWishlistIds = sanitizePersistedGuestWishlistIds(
+          raw.guestWishlistIds
+        )
         return {
           ...currentState,
           locale: raw.locale === 'en' ? 'en' : currentState.locale,
           hasSessionHint: Boolean(raw.hasSessionHint),
-          cart: Array.isArray(raw.cart)
-            ? (raw.cart as CartItemType[])
-            : currentState.cart,
-          wishlistIds: Array.isArray(raw.wishlistIds)
-            ? raw.wishlistIds.filter(
-                (id): id is number => typeof id === 'number'
-              )
-            : currentState.wishlistIds,
+          guestCart: hydratedGuestCart,
+          guestWishlistIds: hydratedGuestWishlistIds,
+          cart: hydratedGuestCart,
+          wishlistIds: hydratedGuestWishlistIds,
           orders: sanitizePersistedOrders(raw.orders),
-          promoCode:
-            typeof raw.promoCode === 'string' || raw.promoCode === null
-              ? raw.promoCode
-              : currentState.promoCode,
-          promoPercent:
-            typeof raw.promoPercent === 'number'
-              ? raw.promoPercent
-              : currentState.promoPercent,
-          // Never hydrate `user` or `is_admin` from localStorage.
+          // Never hydrate `user`, `is_admin`, or authenticated server cart/wishlist from localStorage.
           user: null,
           authStatus: 'idle',
+          authCartSummary: null,
+          authPromoCode: null,
+          authWishlistProducts: [],
+          authWishlistIds: [],
+          promoCode: null,
+          promoPercent: 0,
         }
       },
     }
@@ -619,10 +1528,18 @@ registerAuthSyncCallbacks({
     })
   },
   onSessionCleared: () => {
-    useStore.setState({
+    useStore.setState((state) => ({
       user: null,
       authStatus: 'unauthenticated',
       hasSessionHint: false,
-    })
+      authCartSummary: null,
+      authPromoCode: null,
+      authWishlistProducts: [],
+      authWishlistIds: [],
+      cart: state.guestCart,
+      wishlistIds: state.guestWishlistIds,
+      promoCode: null,
+      promoPercent: 0,
+    }))
   },
 })

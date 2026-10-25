@@ -193,7 +193,7 @@ export default function ProductCard({
             <button
               onClick={(e) => {
                 e.preventDefault()
-                toggleWishlist(product.id)
+                void toggleWishlist(product.id, product)
               }}
               aria-label="Wishlist"
               className={cn(

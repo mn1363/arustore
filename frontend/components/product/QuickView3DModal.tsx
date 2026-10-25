@@ -115,10 +115,12 @@ export default function QuickView3DModal() {
 
           <div className="space-y-2.5 pt-4 border-t border-white/[0.08]">
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (!available) return
-                addToCart(product, 1, activeColor)
-                setQuickViewProduct(null)
+                const added = await addToCart(product, 1, activeColor)
+                if (added) {
+                  setQuickViewProduct(null)
+                }
               }}
               disabled={!available}
               className="w-full py-3 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
