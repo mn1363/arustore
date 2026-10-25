@@ -12,7 +12,8 @@ import { formatNumber } from '@/lib/utils'
 export default function ProfilePage() {
   const router = useRouter()
   const locale = useStore((s) => s.locale)
-  const orders = useStore((s) => s.orders)
+  const authOrders = useStore((s) => s.authOrders)
+  const loadServerOrders = useStore((s) => s.loadServerOrders)
   const wishlistIds = useStore((s) => s.wishlistIds)
   const pushToast = useStore((s) => s.pushToast)
   const { user, isLoading, bootstrapAuth, logoutUser } = useAuth()
@@ -21,6 +22,12 @@ export default function ProfilePage() {
   useEffect(() => {
     void bootstrapAuth()
   }, [bootstrapAuth])
+
+  useEffect(() => {
+    if (user) {
+      void loadServerOrders()
+    }
+  }, [user, loadServerOrders])
 
   const handleLogout = async () => {
     setSigningOut(true)
@@ -130,14 +137,17 @@ export default function ProfilePage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="rounded-2xl card-level-2 p-6">
+        <Link
+          href="/orders"
+          className="rounded-2xl card-level-2 p-6 block hover:border-[#dfc08e]/35 transition-colors"
+        >
           <div className="text-xs text-[#979fb2]">
-            {locale === 'fa' ? 'سفارش‌های ثبت‌شده' : 'Total Orders'}
+            {locale === 'fa' ? 'سفارش‌های ثبت‌شده' : 'Saved Orders'}
           </div>
           <div className="text-2xl font-bold text-[#f4f4f6] mt-2">
-            {formatNumber(orders.length, locale)}
+            {formatNumber(authOrders.length, locale)}
           </div>
-        </div>
+        </Link>
         <div className="rounded-2xl card-level-2 p-6">
           <div className="text-xs text-[#979fb2]">
             {locale === 'fa' ? 'علاقه‌مندی‌ها' : 'Saved Items'}

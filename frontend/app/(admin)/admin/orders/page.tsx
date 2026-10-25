@@ -1,62 +1,184 @@
 'use client'
 
-import React from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import Select from '@/components/ui/Select'
 import { useStore } from '@/lib/store/useStore'
+import { fetchAdminOrders, updateAdminOrderStatus } from '@/lib/api/orders'
 import { formatPrice } from '@/lib/utils'
-import { Order } from '@/types'
+import { ServerOrder } from '@/types'
 
 export default function AdminOrdersPage() {
   const locale = useStore((s) => s.locale)
-  const orders = useStore((s) => s.orders)
-  const updateOrderStatus = useStore((s) => s.updateOrderStatus)
+  const pushToast = useStore((s) => s.pushToast)
+
+  const [orders, setOrders] = useState<ServerOrder[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [updatingId, setUpdatingId] = useState<number | null>(null)
+
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const list = await fetchAdminOrders()
+      setOrders(list)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : locale === 'fa'
+          ? 'خطا در دریافت سفارش‌ها'
+          : 'Failed to load orders'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [locale])
+
+  useEffect(() => {
+    void loadAll()
+  }, [loadAll])
+
+  const handleStatusChange = async (orderId: number, nextStatus: string) => {
+    setUpdatingId(orderId)
+    try {
+      const updated = await updateAdminOrderStatus(orderId, nextStatus)
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? updated : o))
+      )
+      pushToast({
+        title:
+          locale === 'fa'
+            ? 'وضعیت سفارش به‌روزرسانی شد'
+            : 'Order status updated',
+        type: 'success',
+      })
+    } catch (err) {
+      pushToast({
+        title:
+          err instanceof Error
+            ? err.message
+            : locale === 'fa'
+            ? 'خطا در به‌روزرسانی وضعیت'
+            : 'Unable to update order status',
+        type: 'error',
+      })
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-[#f4f4f6]">
-        {locale === 'fa' ? 'مدیریت وضعیت سفارش‌ها' : 'Order Fulfillment'}
-      </h1>
-
-      <div className="space-y-4">
-        {orders.map((order) => (
-          <div
-            key={order.id}
-            className="rounded-3xl card-level-2 p-5 flex flex-wrap items-center justify-between gap-4"
-          >
-            <div>
-              <div className="font-mono font-bold text-[#f4f4f6] text-base">
-                {order.orderNumber}
-              </div>
-              <div className="text-xs text-[#979fb2] mt-0.5">
-                {order.customerName} • {order.shippingAddress}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="text-sm font-bold text-[#dfc08e]">
-                {formatPrice(order.total, locale, order.total_toman)}
-              </div>
-
-              <select
-                value={order.status}
-                onChange={(e) =>
-                  updateOrderStatus(order.id, e.target.value as Order['status'])
-                }
-                className="rounded-xl bg-[#0a0c14] border border-white/[0.12] px-3 py-2 text-xs font-bold text-[#f4f4f6] focus:border-[#dfc08e] focus:outline-none"
-              >
-                <option value="processing">
-                  {locale === 'fa' ? 'در حال آماده‌سازی' : 'Processing'}
-                </option>
-                <option value="shipped">
-                  {locale === 'fa' ? 'ارسال شده' : 'Shipped'}
-                </option>
-                <option value="delivered">
-                  {locale === 'fa' ? 'تحویل داده شده' : 'Delivered'}
-                </option>
-              </select>
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-[#f4f4f6]">
+          {locale === 'fa' ? 'مدیریت سفارش‌ها' : 'Manage Orders'}
+        </h1>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void loadAll()}
+          className="px-4 py-2 rounded-xl secondary-3d-btn text-xs font-medium disabled:opacity-60"
+        >
+          {locale === 'fa' ? 'به‌روزرسانی' : 'Refresh'}
+        </button>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-2xl bg-rose-500/10 border border-rose-500/35 p-4 text-xs text-rose-300"
+        >
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="rounded-3xl surface-level-1 p-10 text-center text-xs text-[#979fb2]">
+          {locale === 'fa' ? 'در حال دریافت سفارش‌ها...' : 'Loading orders...'}
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="rounded-3xl surface-level-1 p-10 text-center text-sm text-[#979fb2]">
+          {locale === 'fa' ? 'سفارشی ثبت نشده است.' : 'No orders found.'}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <div
+              key={order.id}
+              className="rounded-2xl surface-level-1 p-5 flex flex-wrap items-center justify-between gap-4"
+            >
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    dir="ltr"
+                    className="text-sm font-mono font-bold text-[#f4f4f6]"
+                  >
+                    {order.orderNumber}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                      order.paymentStatus === 'paid'
+                        ? 'bg-emerald-500/12 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-[#dfc08e]/12 text-[#dfc08e] border border-[#dfc08e]/30'
+                    }`}
+                  >
+                    {order.paymentStatus === 'paid'
+                      ? locale === 'fa'
+                        ? 'پرداخت شده'
+                        : 'Paid'
+                      : locale === 'fa'
+                      ? 'پرداخت نشده (عدم رزرو موجودی)'
+                      : 'Unpaid (Stock Not Reserved)'}
+                  </span>
+                </div>
+                <div className="text-xs text-[#979fb2]">
+                  {order.customerName} • {order.shippingAddress}
+                </div>
+                <div className="text-xs font-bold text-[#dfc08e]">
+                  {formatPrice(order.totalUsd, locale, order.totalToman)}
+                </div>
+              </div>
+
+              <div className="w-52">
+                <Select
+                  value={order.status}
+                  disabled={updatingId === order.id}
+                  onChange={(e) =>
+                    void handleStatusChange(order.id, e.target.value)
+                  }
+                  options={[
+                    {
+                      value: 'pending_payment',
+                      label:
+                        locale === 'fa'
+                          ? 'در انتظار پرداخت'
+                          : 'Pending Payment',
+                    },
+                    {
+                      value: 'processing',
+                      label:
+                        locale === 'fa' ? 'در حال پردازش' : 'Processing',
+                    },
+                    {
+                      value: 'shipped',
+                      label: locale === 'fa' ? 'ارسال شده' : 'Shipped',
+                    },
+                    {
+                      value: 'delivered',
+                      label: locale === 'fa' ? 'تحویل شده' : 'Delivered',
+                    },
+                    {
+                      value: 'cancelled',
+                      label: locale === 'fa' ? 'لغو شده' : 'Cancelled',
+                    },
+                  ]}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

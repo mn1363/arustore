@@ -1,4 +1,4 @@
-import type { UserProfile } from '@/types'
+import type { CreateOrderPayload, UserProfile } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1'
 
@@ -286,6 +286,18 @@ export const aruApi = {
   },
   admin: {
     dashboard: () => apiFetch<Record<string, unknown>>('/admin/dashboard'),
+    listOrders: <T = unknown>(options?: ApiRequestOptions) =>
+      apiFetch<T>('/admin/orders', options),
+    updateOrderStatus: <T = unknown>(
+      orderId: number,
+      payload: { status: string; note?: string | null },
+      options?: ApiRequestOptions
+    ) =>
+      apiFetch<T>(`/admin/orders/${orderId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+        ...options,
+      }),
   },
   catalog: {
     listProducts: <T = unknown>(query = '', options?: ApiRequestOptions) =>
@@ -369,13 +381,24 @@ export const aruApi = {
       }),
   },
   orders: {
-    create: (token: string | undefined, payload: Record<string, unknown>) =>
-      apiFetch('/orders/', {
+    create: <T = unknown>(
+      payload: CreateOrderPayload,
+      idempotencyKey: string,
+      options?: ApiRequestOptions
+    ) =>
+      apiFetch<T>('/orders/', {
         method: 'POST',
-        token,
+        headers: {
+          'Idempotency-Key': idempotencyKey.trim(),
+          ...(options?.headers || {}),
+        },
         body: JSON.stringify(payload),
+        ...options,
       }),
-    listMine: (token?: string) => apiFetch('/orders/', { token }),
+    listMine: <T = unknown>(options?: ApiRequestOptions) =>
+      apiFetch<T>('/orders/', options),
+    detail: <T = unknown>(orderId: number, options?: ApiRequestOptions) =>
+      apiFetch<T>(`/orders/${orderId}`, options),
   },
   reviews: {
     listForProduct: <T = unknown>(

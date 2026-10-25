@@ -3,7 +3,13 @@ from app.models.brand import Brand
 from app.models.cart import CartItem
 from app.models.category import Category
 from app.models.discount import Discount, DiscountUsage
-from app.models.order import AnalyticsEvent, Order, OrderItem, OrderStatusHistory
+from app.models.order import (
+    AnalyticsEvent,
+    Order,
+    OrderIdempotencyRecord,
+    OrderItem,
+    OrderStatusHistory,
+)
 from app.models.product import Product, ProductImage, ProductVariant, product_category
 from app.models.review import Review
 from app.models.user import Address, User
@@ -23,6 +29,7 @@ __all__ = [
     "Discount",
     "DiscountUsage",
     "Order",
+    "OrderIdempotencyRecord",
     "OrderItem",
     "OrderStatusHistory",
     "AnalyticsEvent",

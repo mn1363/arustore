@@ -7,10 +7,11 @@
     "build": "node ./node_modules/next/dist/bin/next build",
     "start": "node ./node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000",
     "lint": "node ./node_modules/next/dist/bin/next lint",
-    "test": "npm run test:auth && npm run test:catalog && npm run test:cart",
+    "test": "npm run test:auth && npm run test:catalog && npm run test:cart && npm run test:orders",
     "test:auth": "node ./scripts/verify-auth-security.mjs",
     "test:catalog": "node ./scripts/verify-catalog-integration.mjs",
     "test:cart": "node ./scripts/verify-cart-wishlist.mjs",
+    "test:orders": "node ./scripts/verify-orders-checkout.mjs",
     "test:proxy": "node ./scripts/verify-catalog-proxy.mjs"
   },
   "dependencies": {

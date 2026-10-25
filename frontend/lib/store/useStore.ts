@@ -4,12 +4,14 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
   CartItemType,
+  CreateOrderPayload,
   Locale,
   Order,
   Product,
   ProductColorOption,
   ProductReview,
   ServerCartSummary,
+  ServerOrder,
   UserProfile,
 } from '@/types'
 import {
@@ -36,6 +38,13 @@ import {
   resolveValidatedProductOptions,
   updateServerCartItemQuantity,
 } from '@/lib/api/cart'
+import {
+  computeCheckoutCartFingerprint,
+  computeCheckoutPayloadFingerprint,
+  createServerOrder,
+  fetchServerOrders,
+  generateCheckoutIdempotencyKey,
+} from '@/lib/api/orders'
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
 
@@ -193,12 +202,52 @@ function pruneMergeIntentsForGuestCart(
   return sanitizePersistedMergeIntents(intents, guestCart)
 }
 
+export interface PendingCheckoutAttempt {
+  userId: number
+  idempotencyKey: string
+  payloadFingerprint: string
+  cartFingerprint: string
+}
+
+export function sanitizePersistedCheckoutAttempt(
+  rawAttempt: unknown
+): PendingCheckoutAttempt | null {
+  if (!rawAttempt || typeof rawAttempt !== 'object' || Array.isArray(rawAttempt)) {
+    return null
+  }
+  const candidate = rawAttempt as Partial<PendingCheckoutAttempt>
+  const key =
+    typeof candidate.idempotencyKey === 'string'
+      ? candidate.idempotencyKey.trim()
+      : ''
+  if (
+    typeof candidate.userId !== 'number' ||
+    !Number.isInteger(candidate.userId) ||
+    candidate.userId <= 0 ||
+    !key ||
+    key.length > 128 ||
+    typeof candidate.payloadFingerprint !== 'string' ||
+    !/^[0-9a-f]{16}$/i.test(candidate.payloadFingerprint) ||
+    typeof candidate.cartFingerprint !== 'string' ||
+    !/^[0-9a-f]{16}$/i.test(candidate.cartFingerprint)
+  ) {
+    return null
+  }
+  return {
+    userId: candidate.userId,
+    idempotencyKey: key,
+    payloadFingerprint: candidate.payloadFingerprint.toLowerCase(),
+    cartFingerprint: candidate.cartFingerprint.toLowerCase(),
+  }
+}
+
 export interface PersistedAppSlice {
   locale: Locale
   hasSessionHint: boolean
   guestCart: CartItemType[]
   guestWishlistIds: number[]
   pendingCartMergeIntents: Record<string, PendingCartMergeIntent>
+  pendingCheckoutAttempt: PendingCheckoutAttempt | null
   orders: Order[]
 }
 
@@ -213,6 +262,7 @@ export function migratePersistedStoreState(
       guestCart: [],
       guestWishlistIds: [],
       pendingCartMergeIntents: {},
+      pendingCheckoutAttempt: null,
       orders: [],
     }
   }
@@ -235,6 +285,10 @@ export function migratePersistedStoreState(
           migratedGuestCart
         )
       : {}
+  const migratedCheckoutAttempt =
+    version >= 3
+      ? sanitizePersistedCheckoutAttempt(raw.pendingCheckoutAttempt)
+      : null
 
   return {
     locale: preservedLocale,
@@ -242,6 +296,7 @@ export function migratePersistedStoreState(
     guestCart: migratedGuestCart,
     guestWishlistIds: migratedGuestWishlist,
     pendingCartMergeIntents: migratedMergeIntents,
+    pendingCheckoutAttempt: migratedCheckoutAttempt,
     orders: cleanedOrders,
   }
 }
@@ -249,6 +304,13 @@ export function migratePersistedStoreState(
 export interface PromoApplyResult {
   ok: boolean
   error?: string
+}
+
+export interface OrderSubmitResult {
+  ok: boolean
+  order?: ServerOrder
+  error?: string
+  requiresAuth?: boolean
 }
 
 interface AppState {
@@ -310,6 +372,14 @@ interface AppState {
   setQuickViewProduct: (product: Product | null) => void
 
   orders: Order[]
+  authOrders: ServerOrder[]
+  ordersLoading: boolean
+  ordersError: string | null
+  orderSubmitting: boolean
+  orderSubmitError: string | null
+  pendingCheckoutAttempt: PendingCheckoutAttempt | null
+  loadServerOrders: () => Promise<ServerOrder[]>
+  submitCheckoutOrder: (payload: CreateOrderPayload) => Promise<OrderSubmitResult>
   placeOrder: (orderData: {
     customerName: string
     shippingAddress: string
@@ -339,6 +409,7 @@ interface AppState {
 
 let inFlightBootstrap: Promise<UserProfile | null> | null = null
 let inFlightAccountSync: Promise<void> | null = null
+let inFlightOrderSubmission: Promise<OrderSubmitResult> | null = null
 
 // Prevents duplicate concurrent wishlist toggle requests per productId.
 const inFlightWishlistProductIds = new Set<number>()
@@ -346,6 +417,7 @@ const inFlightWishlistProductIds = new Set<number>()
 export function resetCartWishlistRuntimeLocks(): void {
   inFlightBootstrap = null
   inFlightAccountSync = null
+  inFlightOrderSubmission = null
   inFlightWishlistProductIds.clear()
 }
 
@@ -1400,9 +1472,218 @@ export const useStore = create<AppState>()(
       setQuickViewProduct: (product) => set({ quickViewProduct: product }),
 
       orders: [],
+      authOrders: [],
+      ordersLoading: false,
+      ordersError: null,
+      orderSubmitting: false,
+      orderSubmitError: null,
+      pendingCheckoutAttempt: null,
+
+      loadServerOrders: async () => {
+        const { user } = get()
+        if (!user || !getInMemoryAccessToken()) {
+          set({ authOrders: [], ordersLoading: false })
+          return []
+        }
+        set({ ordersLoading: true, ordersError: null })
+        try {
+          const orders = await fetchServerOrders()
+          if (get().user?.id === user.id) {
+            set({
+              authOrders: orders,
+              ordersLoading: false,
+              ordersError: null,
+            })
+          }
+          return orders
+        } catch (err) {
+          const msg = extractMessage(
+            err,
+            get().locale === 'fa'
+              ? 'امکان دریافت فهرست سفارش‌ها وجود ندارد'
+              : 'Unable to load orders'
+          )
+          set({ ordersLoading: false, ordersError: msg })
+          return get().authOrders
+        }
+      },
+
+      submitCheckoutOrder: async (rawPayload) => {
+        const locale = get().locale
+        if (inFlightOrderSubmission || get().orderSubmitting) {
+          return {
+            ok: false,
+            error:
+              locale === 'fa'
+                ? 'درخواست ثبت سفارش در حال ارسال است. لطفاً شکیبا باشید.'
+                : 'Order submission is already in progress. Please wait.',
+          }
+        }
+
+        const currentUser = get().user
+        if (!currentUser || !getInMemoryAccessToken()) {
+          const authMsg =
+            locale === 'fa'
+              ? 'برای ثبت سفارش ابتدا وارد حساب کاربری خود شوید.'
+              : 'Please sign in to submit your order.'
+          set({ orderSubmitError: authMsg })
+          return {
+            ok: false,
+            requiresAuth: true,
+            error: authMsg,
+          }
+        }
+
+        const effectivePromo =
+          rawPayload.promo_code !== undefined
+            ? rawPayload.promo_code
+            : get().authPromoCode ?? get().promoCode ?? null
+
+        const cleanPayload: CreateOrderPayload = {
+          customer_name: (rawPayload.customer_name || '').trim(),
+          customer_phone: rawPayload.customer_phone?.trim() || null,
+          shipping_address: (rawPayload.shipping_address || '').trim(),
+          postal_code: rawPayload.postal_code?.trim() || null,
+          notes: rawPayload.notes?.trim() || null,
+          promo_code: effectivePromo?.trim() || null,
+        }
+
+        if (cleanPayload.customer_name.length < 2) {
+          const msg =
+            locale === 'fa'
+              ? 'نام و نام خانوادگی تحویل‌گیرنده را وارد کنید.'
+              : 'Please enter the recipient full name.'
+          set({ orderSubmitError: msg })
+          return { ok: false, error: msg }
+        }
+        if (cleanPayload.shipping_address.length < 5) {
+          const msg =
+            locale === 'fa'
+              ? 'نشانی کامل تحویل را وارد کنید.'
+              : 'Please enter a complete shipping address.'
+          set({ orderSubmitError: msg })
+          return { ok: false, error: msg }
+        }
+
+        const currentItems = get().authCartSummary?.items || []
+        const payloadFingerprint =
+          computeCheckoutPayloadFingerprint(cleanPayload)
+        const cartFingerprint = computeCheckoutCartFingerprint(currentItems)
+
+        const existingAttempt = get().pendingCheckoutAttempt
+        const canReuseExistingKey =
+          existingAttempt !== null &&
+          existingAttempt.userId === currentUser.id &&
+          existingAttempt.payloadFingerprint === payloadFingerprint &&
+          (existingAttempt.cartFingerprint === cartFingerprint ||
+            currentItems.length === 0)
+
+        if (!canReuseExistingKey && currentItems.length === 0) {
+          const emptyMsg =
+            locale === 'fa'
+              ? 'سبد خرید شما خالی است و امکان ثبت سفارش وجود ندارد.'
+              : 'Cannot place an order with an empty bag.'
+          set({ orderSubmitError: emptyMsg })
+          return { ok: false, error: emptyMsg }
+        }
+
+        const idempotencyKey = canReuseExistingKey
+          ? existingAttempt.idempotencyKey
+          : generateCheckoutIdempotencyKey()
+
+        const nextAttempt: PendingCheckoutAttempt = {
+          userId: currentUser.id,
+          idempotencyKey,
+          payloadFingerprint,
+          cartFingerprint: canReuseExistingKey
+            ? existingAttempt.cartFingerprint
+            : cartFingerprint,
+        }
+
+        // Persist non-PII attempt metadata BEFORE issuing POST /orders/ so retries
+        // across network interruptions or page reloads reuse the exact same Idempotency-Key.
+        set({
+          pendingCheckoutAttempt: nextAttempt,
+          orderSubmitting: true,
+          orderSubmitError: null,
+        })
+
+        inFlightOrderSubmission = (async (): Promise<OrderSubmitResult> => {
+          try {
+            const createdOrder = await createServerOrder(
+              cleanPayload,
+              idempotencyKey
+            )
+
+            // Definitive success: clear pendingCheckoutAttempt & promo state, update orders, and sync authoritative server cart/orders
+            set((state) => {
+              const dedupedOrders = [
+                createdOrder,
+                ...state.authOrders.filter((o) => o.id !== createdOrder.id),
+              ]
+              return {
+                pendingCheckoutAttempt: null,
+                orderSubmitting: false,
+                orderSubmitError: null,
+                authPromoCode: null,
+                promoCode: null,
+                promoPercent: 0,
+                authOrders: dedupedOrders,
+                authCartSummary: {
+                  items: [],
+                  itemCount: 0,
+                  subtotalUsd: 0,
+                  subtotalToman: 0,
+                  discountUsd: 0,
+                  discountToman: 0,
+                  totalUsd: 0,
+                  totalToman: 0,
+                  promoCode: null,
+                  promoPercent: 0,
+                },
+                cart: [],
+              }
+            })
+
+            await Promise.all([
+              get().loadServerCart(),
+              get().loadServerOrders(),
+            ])
+
+            return { ok: true, order: createdOrder }
+          } catch (err) {
+            const msg = extractMessage(
+              err,
+              locale === 'fa'
+                ? 'ثبت سفارش با خطا مواجه شد. سبد خرید شما بدون تغییر حفظ شده است.'
+                : 'Order submission failed. Your shopping bag remains unchanged.'
+            )
+
+            // Definitive 4xx (validation / empty cart / 409 conflict): clear attempt key so user's next fixed submission gets a fresh key.
+            // Network timeout or 5xx: preserve pendingCheckoutAttempt so retrying reuses the exact same Idempotency-Key!
+            const shouldClearAttempt =
+              err instanceof ApiError && err.status >= 400 && err.status < 500
+
+            set((state) => ({
+              orderSubmitting: false,
+              orderSubmitError: msg,
+              pendingCheckoutAttempt: shouldClearAttempt
+                ? null
+                : state.pendingCheckoutAttempt,
+            }))
+            get().pushToast({ title: msg, type: 'error' })
+            return { ok: false, error: msg }
+          } finally {
+            inFlightOrderSubmission = null
+          }
+        })()
+
+        return inFlightOrderSubmission
+      },
+
       placeOrder: () => {
         throw new Error(
-          'Simulated client-side order placement is disabled; backend checkout integration is pending.'
+          'Simulated client-side order placement is disabled; use submitCheckoutOrder via backend API.'
         )
       },
       updateOrderStatus: (orderId, status) =>
@@ -1420,11 +1701,17 @@ export const useStore = create<AppState>()(
         set({ authStatus: 'loading' })
         try {
           const { user } = await aruApi.auth.login(emailOrUsername, password)
-          set({
+          set((state) => ({
             user,
             authStatus: 'authenticated',
             hasSessionHint: true,
-          })
+            authOrders: [],
+            ordersError: null,
+            pendingCheckoutAttempt:
+              state.pendingCheckoutAttempt?.userId === user.id
+                ? state.pendingCheckoutAttempt
+                : null,
+          }))
           await get().syncAuthenticatedState()
           return user
         } catch (err) {
@@ -1437,6 +1724,8 @@ export const useStore = create<AppState>()(
             authPromoCode: null,
             authWishlistProducts: [],
             authWishlistIds: [],
+            authOrders: [],
+            ordersError: null,
             cart: state.guestCart,
             wishlistIds: state.guestWishlistIds,
           }))
@@ -1452,6 +1741,9 @@ export const useStore = create<AppState>()(
             user,
             authStatus: 'authenticated',
             hasSessionHint: true,
+            authOrders: [],
+            ordersError: null,
+            pendingCheckoutAttempt: null,
           })
           await get().syncAuthenticatedState()
           return user
@@ -1465,6 +1757,8 @@ export const useStore = create<AppState>()(
             authPromoCode: null,
             authWishlistProducts: [],
             authWishlistIds: [],
+            authOrders: [],
+            ordersError: null,
             cart: state.guestCart,
             wishlistIds: state.guestWishlistIds,
           }))
@@ -1475,6 +1769,7 @@ export const useStore = create<AppState>()(
       logoutUser: async () => {
         await aruApi.auth.logout()
         inFlightWishlistProductIds.clear()
+        inFlightOrderSubmission = null
         set({
           user: null,
           authStatus: 'unauthenticated',
@@ -1483,6 +1778,12 @@ export const useStore = create<AppState>()(
           authPromoCode: null,
           authWishlistProducts: [],
           authWishlistIds: [],
+          authOrders: [],
+          ordersLoading: false,
+          ordersError: null,
+          orderSubmitting: false,
+          orderSubmitError: null,
+          pendingCheckoutAttempt: null,
           guestCart: [],
           guestWishlistIds: [],
           pendingCartMergeIntents: {},
@@ -1656,7 +1957,9 @@ export const useStore = create<AppState>()(
         guestCart: state.guestCart,
         guestWishlistIds: state.guestWishlistIds,
         pendingCartMergeIntents: state.pendingCartMergeIntents,
-        orders: state.orders,
+        pendingCheckoutAttempt: state.pendingCheckoutAttempt,
+        // Never persist server orders or demo orders into localStorage
+        orders: [],
       }),
       merge: (persistedState, currentState) => {
         const raw =
@@ -1673,6 +1976,9 @@ export const useStore = create<AppState>()(
           raw.pendingCartMergeIntents,
           hydratedGuestCart
         )
+        const hydratedCheckoutAttempt = sanitizePersistedCheckoutAttempt(
+          raw.pendingCheckoutAttempt
+        )
         return {
           ...currentState,
           locale: raw.locale === 'en' ? 'en' : currentState.locale,
@@ -1680,16 +1986,22 @@ export const useStore = create<AppState>()(
           guestCart: hydratedGuestCart,
           guestWishlistIds: hydratedGuestWishlistIds,
           pendingCartMergeIntents: hydratedMergeIntents,
+          pendingCheckoutAttempt: hydratedCheckoutAttempt,
           cart: hydratedGuestCart,
           wishlistIds: hydratedGuestWishlistIds,
           orders: sanitizePersistedOrders(raw.orders),
-          // Never hydrate `user`, `is_admin`, or authenticated server cart/wishlist from localStorage.
+          // Never hydrate `user`, `is_admin`, or authenticated server cart/wishlist/orders from localStorage.
           user: null,
           authStatus: 'idle',
           authCartSummary: null,
           authPromoCode: null,
           authWishlistProducts: [],
           authWishlistIds: [],
+          authOrders: [],
+          ordersLoading: false,
+          ordersError: null,
+          orderSubmitting: false,
+          orderSubmitError: null,
           promoCode: null,
           promoPercent: 0,
         }
@@ -1715,6 +2027,12 @@ registerAuthSyncCallbacks({
       authPromoCode: null,
       authWishlistProducts: [],
       authWishlistIds: [],
+      authOrders: [],
+      ordersLoading: false,
+      ordersError: null,
+      orderSubmitting: false,
+      orderSubmitError: null,
+      pendingCheckoutAttempt: null,
       cart: state.guestCart,
       wishlistIds: state.guestWishlistIds,
       promoCode: null,

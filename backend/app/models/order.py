@@ -1,4 +1,14 @@
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
@@ -11,8 +21,8 @@ class Order(Base):
     order_number = Column(String(40), unique=True, index=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
-    status = Column(String(32), nullable=False, default="processing", index=True)
-    payment_status = Column(String(32), nullable=False, default="paid")
+    status = Column(String(32), nullable=False, default="pending_payment", index=True)
+    payment_status = Column(String(32), nullable=False, default="pending")
     payment_reference = Column(String(80), nullable=True)
 
     subtotal = Column(Float, nullable=False, default=0.0)
@@ -72,6 +82,36 @@ class OrderStatusHistory(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     order = relationship("Order", back_populates="status_history")
+
+
+class OrderIdempotencyRecord(Base):
+    __tablename__ = "order_idempotency_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "idempotency_key",
+            name="uq_order_idempotency_user_key",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    idempotency_key = Column(String(128), nullable=False)
+    payload_hash = Column(String(64), nullable=False)
+    cart_hash = Column(String(64), nullable=False)
+    order_id = Column(
+        Integer,
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class AnalyticsEvent(Base):

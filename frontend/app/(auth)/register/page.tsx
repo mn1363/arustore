@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import Input from '@/components/ui/Input'
 import { useAuth } from '@/hooks/useAuth'
 import { useStore } from '@/lib/store/useStore'
-import { formatAuthError } from '@/lib/authErrors'
+import { formatAuthError, sanitizeRedirectTarget } from '@/lib/authErrors'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -70,13 +70,28 @@ export default function RegisterPage() {
         title: locale === 'fa' ? 'حساب کاربری ساخته شد' : 'Account created',
         type: 'success',
       })
-      router.replace('/profile')
+      const rawNext =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('next')
+          : null
+      const target = rawNext
+        ? sanitizeRedirectTarget(rawNext, '/profile')
+        : '/profile'
+      router.replace(target)
     } catch (err) {
       setErrorMessage(formatAuthError(err, locale))
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  const nextQueryParam =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('next')
+      : null
+  const loginHref = nextQueryParam
+    ? `/login?next=${encodeURIComponent(nextQueryParam)}`
+    : '/login'
 
   return (
     <div className="w-full max-w-md rounded-3xl glass-panel p-8 sm:p-10 space-y-6">
@@ -146,7 +161,7 @@ export default function RegisterPage() {
 
       <div className="text-xs text-[#979fb2] text-center">
         {locale === 'fa' ? 'قبلاً ثبت‌نام کرده‌اید؟ ' : 'Already have an account? '}
-        <Link href="/login" className="text-[#dfc08e] font-bold hover:underline">
+        <Link href={loginHref} className="text-[#dfc08e] font-bold hover:underline">
           {locale === 'fa' ? 'ورود' : 'Sign In'}
         </Link>
       </div>

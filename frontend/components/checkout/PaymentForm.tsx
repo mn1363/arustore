@@ -15,7 +15,7 @@ export default function PaymentForm() {
             {locale === 'fa' ? '۲' : '2'}
           </span>
           <h2 className="text-base sm:text-lg font-bold text-[#f4f4f6]">
-            {locale === 'fa' ? 'وضعیت درگاه پرداخت بانکی' : 'Payment Gateway Status'}
+            {locale === 'fa' ? 'وضعیت پرداخت آنلاین' : 'Payment Status'}
           </h2>
         </div>
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/[0.08] text-xs text-[#979fb2]">
@@ -32,13 +32,13 @@ export default function PaymentForm() {
       >
         <p className="font-bold text-[#f4f4f6]">
           {locale === 'fa'
-            ? 'اتصال به درگاه پرداخت و ثبت سفارش هنوز فعال نشده است'
-            : 'Online payment and order submission are not yet enabled'}
+            ? 'پرداخت آنلاین هنوز فعال نیست • ثبت سفارش با وضعیت «در انتظار پرداخت»'
+            : 'Online payment is unavailable • Orders are saved as Pending Payment'}
         </p>
         <p className="text-[#979fb2]">
           {locale === 'fa'
-            ? 'برای حفظ امنیت کاربران، تا زمان فعال‌سازی رسمی درگاه بانکی هیچ فیلدی برای دریافت یا ذخیره شماره کارت، تاریخ انقضا یا رمز دوم نمایش داده نمی‌شود.'
-            : 'For your security, no card numbers, expiry dates, or verification codes are requested or stored while payment integration is pending.'}
+            ? 'هیچ‌گونه شماره کارت، تاریخ انقضا یا رمز بانکی دریافت و ذخیره نمی‌شود. سفارش شما بدون تراکنش مالی ثبت خواهد شد، پرداخت‌شده محسوب نمی‌شود و موجودی انبار تا زمان فعال‌سازی پرداخت رزرو نخواهد شد.'
+            : 'No card numbers, expiry dates, or verification codes are requested or stored. Submitting saves a pending-payment order record only — no charge is made and inventory is not reserved.'}
         </p>
       </div>
     </div>

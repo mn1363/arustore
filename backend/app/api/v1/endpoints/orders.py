@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -11,15 +11,22 @@ from app.services.order_service import OrderService
 router = APIRouter()
 
 
+@router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def create_order(
     payload: OrderCreate,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
-    return await OrderService(db).create_order(current_user, payload)
+    return await OrderService(db).create_order(
+        current_user,
+        payload,
+        idempotency_key=idempotency_key,
+    )
 
 
+@router.get("", response_model=List[OrderResponse], include_in_schema=False)
 @router.get("/", response_model=List[OrderResponse])
 async def list_my_orders(
     current_user: User = Depends(get_current_user),

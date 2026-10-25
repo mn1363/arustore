@@ -57,6 +57,14 @@ export default function LoginPage() {
     }
   }
 
+  const nextQueryParam =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('next')
+      : null
+  const registerHref = nextQueryParam
+    ? `/register?next=${encodeURIComponent(nextQueryParam)}`
+    : '/register'
+
   return (
     <div className="w-full max-w-4xl rounded-3xl glass-panel overflow-hidden grid grid-cols-1 md:grid-cols-12">
       <div className="md:col-span-6 p-8 sm:p-10 space-y-6">
@@ -121,7 +129,7 @@ export default function LoginPage() {
 
         <div className="text-xs text-[#979fb2] text-center pt-2">
           {locale === 'fa' ? 'حساب کاربری ندارید؟ ' : 'No account yet? '}
-          <Link href="/register" className="text-[#dfc08e] font-bold hover:underline">
+          <Link href={registerHref} className="text-[#dfc08e] font-bold hover:underline">
             {locale === 'fa' ? 'ثبت‌نام' : 'Create Account'}
           </Link>
         </div>

@@ -157,11 +157,74 @@ export interface OrderItemSummary {
   colorName_fa: string
 }
 
+export type OrderLifecycleStatus =
+  | 'pending_payment'
+  | 'processing'
+  | 'shipped'
+  | 'delivered'
+  | 'cancelled'
+
+export type OrderPaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
+
+export interface ServerOrderItem {
+  id: number
+  productId: number | null
+  productName: string
+  productNameFa: string
+  productImage: string | null
+  colorName: string | null
+  colorNameFa: string | null
+  edition: string | null
+  quantity: number
+  unitPriceUsd: number
+  unitPriceToman: number
+}
+
+export interface ServerOrderStatusHistoryEntry {
+  id: number
+  status: string
+  note: string | null
+  createdAt: string | null
+}
+
+export interface ServerOrder {
+  id: number
+  orderNumber: string
+  userId: number | null
+  status: OrderLifecycleStatus | string
+  paymentStatus: OrderPaymentStatus | string
+  paymentReference: string | null
+  stockReserved: boolean
+  subtotalUsd: number
+  discountUsd: number
+  shippingCostUsd: number
+  totalUsd: number
+  totalToman: number
+  promoCode: string | null
+  customerName: string
+  customerPhone: string | null
+  shippingAddress: string
+  postalCode: string | null
+  notes: string | null
+  createdAt: string | null
+  items: ServerOrderItem[]
+  statusHistory: ServerOrderStatusHistoryEntry[]
+}
+
+export interface CreateOrderPayload {
+  customer_name: string
+  customer_phone?: string | null
+  shipping_address: string
+  postal_code?: string | null
+  notes?: string | null
+  promo_code?: string | null
+}
+
 export interface Order {
   id: string
   orderNumber: string
   createdAt: string
-  status: 'processing' | 'shipped' | 'delivered'
+  status: 'pending_payment' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
   total: number
   total_toman: number
   shippingAddress: string

@@ -1,8 +1,8 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
-import { ShieldCheck } from 'lucide-react'
+import { ShieldCheck, Tag, X } from 'lucide-react'
 import { useCart } from '@/hooks/useCart'
 import { useStore } from '@/lib/store/useStore'
 import { formatNumber, formatPrice, getProductTitle } from '@/lib/utils'
@@ -10,9 +10,13 @@ import { getCartItemUnitPrices } from '@/lib/api/cart'
 import { getDict } from '@/lib/data/i18n'
 
 export default function OrderSummary({
-  onAttemptSubmit,
+  isAuthenticated,
+  isSubmitting = false,
+  onSubmitOrder,
 }: {
-  onAttemptSubmit?: () => void
+  isAuthenticated: boolean
+  isSubmitting?: boolean
+  onSubmitOrder: () => void
 }) {
   const locale = useStore((s) => s.locale)
   const dict = getDict(locale)
@@ -24,7 +28,31 @@ export default function OrderSummary({
     discountToman,
     totalUsd,
     totalToman,
+    promoCode,
+    applyPromoCode,
+    removePromoCode,
   } = useCart()
+
+  const [promoInput, setPromoInput] = useState('')
+  const [promoBusy, setPromoBusy] = useState(false)
+  const [promoFeedback, setPromoFeedback] = useState<string | null>(null)
+
+  const handleApplyPromo = async () => {
+    const cleaned = promoInput.trim()
+    if (!cleaned || promoBusy || isSubmitting) return
+    setPromoBusy(true)
+    setPromoFeedback(null)
+    try {
+      const res = await applyPromoCode(cleaned)
+      if (res.ok) {
+        setPromoInput('')
+      } else if (res.error) {
+        setPromoFeedback(res.error)
+      }
+    } finally {
+      setPromoBusy(false)
+    }
+  }
 
   return (
     <div className="rounded-2xl surface-level-1 p-6 space-y-5 h-fit sticky top-24">
@@ -58,6 +86,55 @@ export default function OrderSummary({
         })}
       </div>
 
+      {isAuthenticated && (
+        <div className="pt-3 border-t border-white/[0.07] space-y-2">
+          {promoCode ? (
+            <div className="flex items-center justify-between rounded-xl card-level-2 px-3.5 py-2.5 text-xs">
+              <span className="inline-flex items-center gap-1.5 font-bold text-[#dfc08e]">
+                <Tag className="w-3.5 h-3.5" />
+                <span dir="ltr">{promoCode}</span>
+              </span>
+              <button
+                type="button"
+                disabled={isSubmitting || promoBusy}
+                onClick={() => void removePromoCode()}
+                aria-label={locale === 'fa' ? 'حذف کد تخفیف' : 'Remove promo code'}
+                className="text-[#979fb2] hover:text-[#f4f4f6] disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                dir="ltr"
+                value={promoInput}
+                disabled={isSubmitting || promoBusy}
+                onChange={(e) => setPromoInput(e.target.value)}
+                placeholder={locale === 'fa' ? 'کد تخفیف' : 'Promo code'}
+                className="flex-1 min-w-0 rounded-xl bg-[#0e111a] border border-white/[0.08] px-3 py-2 text-xs text-[#f4f4f6] placeholder:text-[#666e82] focus:outline-none focus:border-[#dfc08e]/50"
+              />
+              <button
+                type="button"
+                disabled={!promoInput.trim() || isSubmitting || promoBusy}
+                onClick={handleApplyPromo}
+                className="px-3.5 py-2 rounded-xl secondary-3d-btn text-xs font-bold disabled:opacity-50"
+              >
+                {promoBusy
+                  ? '...'
+                  : locale === 'fa'
+                  ? 'اعمال'
+                  : 'Apply'}
+              </button>
+            </div>
+          )}
+          {promoFeedback && (
+            <p className="text-[11px] text-rose-300">{promoFeedback}</p>
+          )}
+        </div>
+      )}
+
       <div className="space-y-2.5 pt-4 border-t border-white/[0.07] text-xs sm:text-sm">
         <div className="flex justify-between text-[#b4bccf]">
           <span>{dict.common.subtotal}</span>
@@ -78,20 +155,36 @@ export default function OrderSummary({
       </div>
 
       <div className="space-y-2.5">
-        <button
-          type="button"
-          aria-disabled="true"
-          onClick={onAttemptSubmit}
-          className="w-full py-3.5 rounded-xl secondary-3d-btn font-bold text-sm text-[#979fb2] cursor-not-allowed opacity-80"
-        >
-          {locale === 'fa'
-            ? 'ثبت سفارش و پرداخت موقتاً غیرفعال است'
-            : 'Order Submission Unavailable'}
-        </button>
+        {isAuthenticated ? (
+          <button
+            type="button"
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={onSubmitOrder}
+            className="w-full py-3.5 rounded-xl champagne-btn font-bold text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSubmitting
+              ? locale === 'fa'
+                ? 'در حال ثبت سفارش...'
+                : 'Saving Order...'
+              : locale === 'fa'
+              ? 'ثبت سفارش (در انتظار پرداخت)'
+              : 'Save Order (Pending Payment)'}
+          </button>
+        ) : (
+          <Link
+            href="/login?next=/checkout"
+            className="w-full py-3.5 rounded-xl champagne-btn font-bold text-sm flex items-center justify-center"
+          >
+            {locale === 'fa'
+              ? 'ورود به حساب برای ثبت سفارش'
+              : 'Sign In to Submit Order'}
+          </Link>
+        )}
 
         <Link
           href="/cart"
-          className="w-full py-3 rounded-xl champagne-btn font-bold text-xs flex items-center justify-center"
+          className="w-full py-3 rounded-xl secondary-3d-btn font-bold text-xs flex items-center justify-center"
         >
           {locale === 'fa' ? 'بازگشت به سبد خرید' : 'Return to Bag'}
         </Link>
@@ -101,8 +194,8 @@ export default function OrderSummary({
         <ShieldCheck className="w-4 h-4 text-[#dfc08e] flex-shrink-0" />
         <span>
           {locale === 'fa'
-            ? 'بسته‌بندی ضربه‌گیر اختصاصی و تضمین سلامت فیزیکی تحویل'
-            : 'Protective packaging & insured delivery'}
+            ? 'ثبت بدون پرداخت آنلاین • عدم رزرو موجودی تا فعال‌سازی پرداخت'
+            : 'Saved without payment • Stock is not reserved before payment'}
         </span>
       </div>
     </div>

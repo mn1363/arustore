@@ -93,3 +93,90 @@ test('5. P0-A/P0-A1 auth endpoints and status codes remain intact through Next.j
   })
   assert.equal(refreshRes.status, 401)
 })
+
+test('6. P0-C2 /api/v1/orders forwards Idempotency-Key and creates safe pending_payment orders through Next.js rewrite', async () => {
+  // Unauthenticated /orders and /orders/ return direct 401 without 307/308 redirect
+  const unauthNoSlash = await fetch(`${NEXT_BASE}/api/v1/orders`, {
+    redirect: 'manual',
+  })
+  assert.equal(unauthNoSlash.status, 401)
+
+  const unauthSlash = await fetch(`${NEXT_BASE}/api/v1/orders/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      customer_name: 'Test',
+      shipping_address: 'Tehran Valiasr St 10',
+    }),
+    redirect: 'manual',
+  })
+  assert.equal(unauthSlash.status, 401)
+
+  const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const regRes = await fetch(`${NEXT_BASE}/api/v1/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: `proxy-order-${uniqueSuffix}@arustore.ir`,
+      full_name: 'Proxy Order Tester',
+      password: 'ProxyOrderPass!2026',
+    }),
+  })
+  assert.equal(regRes.status, 201)
+  const { access_token } = await regRes.json()
+  const authHeaders = {
+    Authorization: `Bearer ${access_token}`,
+    'Content-Type': 'application/json',
+  }
+
+  const addCartRes = await fetch(`${NEXT_BASE}/api/v1/cart/items`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ product_id: 1, quantity: 1 }),
+  })
+  assert.equal(addCartRes.status, 201)
+
+  const idemKey = `proxy-idem-${uniqueSuffix}`
+  const shippingBody = {
+    customer_name: 'Proxy Order Tester',
+    customer_phone: '09124445566',
+    shipping_address: 'تهران، خیابان شریعتی، پلاک ۱۰۸',
+    postal_code: '1934567890',
+  }
+
+  const createRes = await fetch(`${NEXT_BASE}/api/v1/orders/`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Idempotency-Key': idemKey },
+    body: JSON.stringify(shippingBody),
+    redirect: 'manual',
+  })
+  assert.equal(createRes.status, 201)
+  const createdOrder = await createRes.json()
+  assert.equal(createdOrder.status, 'pending_payment')
+  assert.equal(createdOrder.payment_status, 'pending')
+  assert.equal(createdOrder.payment_reference, null)
+  assert.equal(createdOrder.stock_reserved, false)
+
+  // Replay with same Idempotency-Key returns same order
+  const replayRes = await fetch(`${NEXT_BASE}/api/v1/orders/`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Idempotency-Key': idemKey },
+    body: JSON.stringify(shippingBody),
+    redirect: 'manual',
+  })
+  assert.equal(replayRes.status, 201)
+  const replayedOrder = await replayRes.json()
+  assert.equal(replayedOrder.id, createdOrder.id)
+
+  // Reusing same Idempotency-Key with altered shipping address returns 409 Conflict
+  const conflictRes = await fetch(`${NEXT_BASE}/api/v1/orders/`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Idempotency-Key': idemKey },
+    body: JSON.stringify({
+      ...shippingBody,
+      shipping_address: 'شیراز، خیابان زند، پلاک ۵۵',
+    }),
+    redirect: 'manual',
+  })
+  assert.equal(conflictRes.status, 409)
+})
