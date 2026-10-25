@@ -40,6 +40,23 @@ let storeMod
 let clientMod
 let cartApiMod
 let catalogApiMod
+let nodeRequire
+
+function simulateBrowserPageReload() {
+  const clientPath = path.join(tmpOutDir, 'lib/api/client.js')
+  const cartPath = path.join(tmpOutDir, 'lib/api/cart.js')
+  const storePath = path.join(tmpOutDir, 'lib/store/useStore.js')
+
+  delete nodeRequire.cache[storePath]
+  delete nodeRequire.cache[cartPath]
+  delete nodeRequire.cache[clientPath]
+
+  clientMod = nodeRequire(clientPath)
+  cartApiMod = nodeRequire(cartPath)
+  storeMod = nodeRequire(storePath)
+
+  return { clientMod, cartApiMod, storeMod }
+}
 
 function makeBackendProductDto(id, overrides = {}) {
   return {
@@ -198,11 +215,11 @@ before(() => {
     return originalResolve.call(this, request, parent, isMain, options)
   }
 
-  const req = Module.createRequire(import.meta.url)
-  clientMod = req(path.join(tmpOutDir, 'lib/api/client.js'))
-  catalogApiMod = req(path.join(tmpOutDir, 'lib/api/catalog.js'))
-  cartApiMod = req(path.join(tmpOutDir, 'lib/api/cart.js'))
-  storeMod = req(path.join(tmpOutDir, 'lib/store/useStore.js'))
+  nodeRequire = Module.createRequire(import.meta.url)
+  clientMod = nodeRequire(path.join(tmpOutDir, 'lib/api/client.js'))
+  catalogApiMod = nodeRequire(path.join(tmpOutDir, 'lib/api/catalog.js'))
+  cartApiMod = nodeRequire(path.join(tmpOutDir, 'lib/api/cart.js'))
+  storeMod = nodeRequire(path.join(tmpOutDir, 'lib/store/useStore.js'))
 })
 
 beforeEach(() => {
@@ -214,6 +231,7 @@ beforeEach(() => {
     products: [],
     cart: [],
     guestCart: [],
+    pendingCartMergeIntents: {},
     authCartSummary: null,
     authPromoCode: null,
     cartLoading: false,
@@ -679,7 +697,461 @@ test('4. Idempotent merge retry after network timeout NEVER doubles quantities (
   assert.equal(postCount, 1)
 })
 
-test('5. Authenticated wishlist sync deduplicates concurrent toggles and updates from server state', async () => {
+test('5. Case A — POST response lost, followed by full page reload (fresh module + store rehydration) keeps quantity at 2, not 4', async () => {
+  const { mapProductDtoToProduct } = catalogApiMod
+  const prod1Dto = makeBackendProductDto(1, { stock_quantity: 20 })
+  const prod1 = mapProductDtoToProduct(prod1Dto)
+
+  // Guest cart has quantity 2 for a variant absent from the server cart
+  await storeMod.useStore.getState().addToCart(prod1, 2, prod1.colors[0], 'standard')
+  assert.equal(storeMod.useStore.getState().guestCart[0].quantity, 2)
+
+  let serverItems = []
+  let failPostResponseAfterCommit = true
+  let postCount = 0
+  let patchCount = 0
+  let cartGetCount = 0
+
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url)
+    const method = init.method || 'GET'
+    if (u.endsWith('/auth/login/json')) {
+      return jsonResponse({
+        access_token: 'jwt-case-a-initial',
+        token_type: 'bearer',
+        user: {
+          id: 51,
+          email: 'case-a@arustore.ir',
+          full_name: 'Case A Buyer',
+          is_admin: false,
+        },
+      })
+    }
+    if (u.endsWith('/auth/refresh') && method === 'POST') {
+      return jsonResponse({
+        access_token: 'jwt-case-a-reloaded',
+        token_type: 'bearer',
+        user: {
+          id: 51,
+          email: 'case-a@arustore.ir',
+          full_name: 'Case A Buyer',
+          is_admin: false,
+        },
+      })
+    }
+    if (u.endsWith('/cart/items') && method === 'POST') {
+      postCount += 1
+      const body = JSON.parse(init.body)
+      // Server commits POST (quantity = 2) before client-side network failure!
+      serverItems.push({
+        id: 601,
+        product_id: body.product_id,
+        quantity: body.quantity,
+        selected_color: body.selected_color || prod1Dto.colors[0],
+        selected_edition: body.selected_edition || 'standard',
+        unit_price: prod1Dto.price,
+        unit_price_toman: prod1Dto.price_toman,
+        line_total: prod1Dto.price * body.quantity,
+        line_total_toman: prod1Dto.price_toman * body.quantity,
+        product: prod1Dto,
+      })
+      if (failPostResponseAfterCommit) {
+        throw new TypeError('POST response lost after server commit')
+      }
+      return jsonResponse(makeCartSummaryDto(serverItems), 201)
+    }
+    if (u.includes('/cart/items/') && method === 'PATCH') {
+      patchCount += 1
+      const { quantity } = JSON.parse(init.body)
+      serverItems = serverItems.map((it) => ({ ...it, quantity }))
+      return jsonResponse(makeCartSummaryDto(serverItems))
+    }
+    if (u.includes('/cart/')) {
+      cartGetCount += 1
+      return jsonResponse(makeCartSummaryDto(serverItems))
+    }
+    if (u.includes('/wishlist/')) {
+      return jsonResponse([])
+    }
+    throw new Error(`Unexpected fetch: ${method} ${u}`)
+  }
+
+  // Step 1: Login triggers merge -> POST commits qty 2 on server, then throws network error
+  await storeMod.useStore.getState().loginUser('case-a@arustore.ir', 'StrongPass123!')
+  assert.equal(postCount, 1)
+  assert.equal(serverItems[0].quantity, 2)
+  // Guest item remains until reconciliation
+  assert.equal(storeMod.useStore.getState().guestCart.length, 1)
+  assert.equal(storeMod.useStore.getState().guestCart[0].quantity, 2)
+
+  // Verify persisted localStorage holds merge intent without leaking tokens, profile PII, or server cart
+  const persistedBeforeReload = mockLocalStorage.getItem('arustore-aluminum-v3') || ''
+  assert.equal(persistedBeforeReload.includes('pendingCartMergeIntents'), true)
+  assert.equal(persistedBeforeReload.includes('jwt-case-a-initial'), false)
+  assert.equal(persistedBeforeReload.includes('case-a@arustore.ir'), false)
+  assert.equal(persistedBeforeReload.includes('601'), false)
+
+  // Step 2: Simulate full browser reload (destroy module runtime state & rehydrate fresh store from localStorage)
+  failPostResponseAfterCommit = false
+  const reloaded = simulateBrowserPageReload()
+  await reloaded.storeMod.useStore.persist.rehydrate()
+
+  assert.equal(reloaded.clientMod.getInMemoryAccessToken(), null)
+  assert.equal(reloaded.storeMod.useStore.getState().user, null)
+  assert.equal(reloaded.storeMod.useStore.getState().guestCart.length, 1)
+  assert.equal(reloaded.storeMod.useStore.getState().guestCart[0].quantity, 2)
+
+  // Step 3: Restore session via bootstrapAuth() -> reloads GET /cart/ and reconciles idempotently
+  const getCountBeforeReloadSync = cartGetCount
+  await reloaded.storeMod.useStore.getState().bootstrapAuth()
+
+  assert.equal(cartGetCount > getCountBeforeReloadSync, true)
+  assert.equal(postCount, 1)
+  assert.equal(patchCount, 0)
+  assert.equal(serverItems.length, 1)
+  assert.equal(serverItems[0].quantity, 2)
+
+  const afterReloadState = reloaded.storeMod.useStore.getState()
+  assert.equal(afterReloadState.cart.length, 1)
+  assert.equal(afterReloadState.cart[0].quantity, 2)
+  assert.equal(afterReloadState.guestCart.length, 0)
+  assert.deepEqual(afterReloadState.pendingCartMergeIntents, {})
+})
+
+test('6. Case B — PATCH response lost, followed by full page reload (fresh module + store rehydration) keeps quantity at 5, not 8', async () => {
+  const { mapProductDtoToProduct } = catalogApiMod
+  const prod2Dto = makeBackendProductDto(2, { stock_quantity: 20 })
+  const prod2 = mapProductDtoToProduct(prod2Dto)
+
+  // Guest cart has quantity 3; server already has quantity 2 for same canonical variant
+  await storeMod.useStore.getState().addToCart(prod2, 3, prod2.colors[0], 'standard')
+  assert.equal(storeMod.useStore.getState().guestCart[0].quantity, 3)
+
+  let serverItems = [
+    {
+      id: 77,
+      product_id: 2,
+      quantity: 2,
+      selected_color: prod2Dto.colors[0],
+      selected_edition: 'standard',
+      unit_price: prod2Dto.price,
+      unit_price_toman: prod2Dto.price_toman,
+      line_total: prod2Dto.price * 2,
+      line_total_toman: prod2Dto.price_toman * 2,
+      product: prod2Dto,
+    },
+  ]
+  let failPatchResponseAfterCommit = true
+  let patchCount = 0
+  let postCount = 0
+
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url)
+    const method = init.method || 'GET'
+    if (u.endsWith('/auth/login/json')) {
+      return jsonResponse({
+        access_token: 'jwt-case-b-initial',
+        token_type: 'bearer',
+        user: {
+          id: 52,
+          email: 'case-b@arustore.ir',
+          full_name: 'Case B Buyer',
+          is_admin: false,
+        },
+      })
+    }
+    if (u.endsWith('/auth/refresh') && method === 'POST') {
+      return jsonResponse({
+        access_token: 'jwt-case-b-reloaded',
+        token_type: 'bearer',
+        user: {
+          id: 52,
+          email: 'case-b@arustore.ir',
+          full_name: 'Case B Buyer',
+          is_admin: false,
+        },
+      })
+    }
+    if (u.includes('/cart/items/77') && method === 'PATCH') {
+      patchCount += 1
+      const { quantity } = JSON.parse(init.body)
+      // Server commits target quantity 5 before client-side network failure!
+      serverItems = serverItems.map((it) =>
+        it.id === 77
+          ? {
+              ...it,
+              quantity,
+              line_total: it.unit_price * quantity,
+              line_total_toman: it.unit_price_toman * quantity,
+            }
+          : it
+      )
+      if (failPatchResponseAfterCommit) {
+        throw new TypeError('PATCH response lost after server commit')
+      }
+      return jsonResponse(makeCartSummaryDto(serverItems))
+    }
+    if (u.endsWith('/cart/items') && method === 'POST') {
+      postCount += 1
+      return jsonResponse(makeCartSummaryDto(serverItems), 201)
+    }
+    if (u.includes('/cart/')) {
+      return jsonResponse(makeCartSummaryDto(serverItems))
+    }
+    if (u.includes('/wishlist/')) {
+      return jsonResponse([])
+    }
+    throw new Error(`Unexpected fetch: ${method} ${u}`)
+  }
+
+  // Step 1: Login triggers PATCH 5 -> commits on server, network fails before response
+  await storeMod.useStore.getState().loginUser('case-b@arustore.ir', 'StrongPass123!')
+  assert.equal(patchCount, 1)
+  assert.equal(serverItems[0].quantity, 5)
+  assert.equal(storeMod.useStore.getState().guestCart.length, 1)
+  assert.equal(storeMod.useStore.getState().guestCart[0].quantity, 3)
+
+  // Step 2: Simulate full browser reload (destroy module runtime state & rehydrate fresh store)
+  failPatchResponseAfterCommit = false
+  const reloaded = simulateBrowserPageReload()
+  await reloaded.storeMod.useStore.persist.rehydrate()
+
+  assert.equal(reloaded.clientMod.getInMemoryAccessToken(), null)
+  assert.equal(reloaded.storeMod.useStore.getState().user, null)
+  assert.equal(reloaded.storeMod.useStore.getState().guestCart[0].quantity, 3)
+
+  // Step 3: Session restore reconciles against server quantity 5 without adding +3 again
+  await reloaded.storeMod.useStore.getState().bootstrapAuth()
+
+  assert.equal(patchCount, 1)
+  assert.equal(postCount, 0)
+  assert.equal(serverItems[0].quantity, 5)
+
+  const afterReloadState = reloaded.storeMod.useStore.getState()
+  assert.equal(afterReloadState.cart.length, 1)
+  assert.equal(afterReloadState.cart[0].quantity, 5)
+  assert.equal(afterReloadState.guestCart.length, 0)
+  assert.deepEqual(afterReloadState.pendingCartMergeIntents, {})
+})
+
+test('7. Pending merge intent is strictly user-scoped across accounts and honors legitimate guest cart edits', async () => {
+  const { mapProductDtoToProduct } = catalogApiMod
+  const prod1Dto = makeBackendProductDto(1, { stock_quantity: 20 })
+  const prod1 = mapProductDtoToProduct(prod1Dto)
+
+  // Part A: User A (id 101) commits qty 2 via POST and loses response;
+  // after reload & session expiry, User B (id 202, who ALREADY has qty 2 on server) logs in -> must merge 2 + 2 = 4!
+  await storeMod.useStore.getState().addToCart(prod1, 2, prod1.colors[0], 'standard')
+
+  let userAServerItems = []
+  let userBServerItems = [
+    {
+      id: 901,
+      product_id: 1,
+      quantity: 2,
+      selected_color: prod1Dto.colors[0],
+      selected_edition: 'standard',
+      unit_price: prod1Dto.price,
+      unit_price_toman: prod1Dto.price_toman,
+      line_total: prod1Dto.price * 2,
+      line_total_toman: prod1Dto.price_toman * 2,
+      product: prod1Dto,
+    },
+  ]
+  let activeAccount = 'A'
+
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url)
+    const method = init.method || 'GET'
+    if (u.endsWith('/auth/login/json')) {
+      const body = JSON.parse(init.body)
+      if (body.email_or_username === 'user-a@arustore.ir') {
+        activeAccount = 'A'
+        return jsonResponse({
+          access_token: 'jwt-user-a',
+          token_type: 'bearer',
+          user: { id: 101, email: 'user-a@arustore.ir', full_name: 'User A', is_admin: false },
+        })
+      }
+      activeAccount = 'B'
+      return jsonResponse({
+        access_token: 'jwt-user-b',
+        token_type: 'bearer',
+        user: { id: 202, email: 'user-b@arustore.ir', full_name: 'User B', is_admin: false },
+      })
+    }
+    if (u.endsWith('/auth/refresh')) {
+      return jsonResponse({ detail: 'Expired session' }, 401)
+    }
+    if (u.endsWith('/cart/items') && method === 'POST' && activeAccount === 'A') {
+      userAServerItems.push({
+        id: 801,
+        product_id: 1,
+        quantity: 2,
+        selected_color: prod1Dto.colors[0],
+        selected_edition: 'standard',
+        unit_price: prod1Dto.price,
+        unit_price_toman: prod1Dto.price_toman,
+        line_total: prod1Dto.price * 2,
+        line_total_toman: prod1Dto.price_toman * 2,
+        product: prod1Dto,
+      })
+      throw new TypeError('User A POST response lost')
+    }
+    if (u.includes('/cart/items/901') && method === 'PATCH' && activeAccount === 'B') {
+      const { quantity } = JSON.parse(init.body)
+      userBServerItems = userBServerItems.map((it) => ({
+        ...it,
+        quantity,
+        line_total: it.unit_price * quantity,
+        line_total_toman: it.unit_price_toman * quantity,
+      }))
+      return jsonResponse(makeCartSummaryDto(userBServerItems))
+    }
+    if (u.includes('/cart/')) {
+      return jsonResponse(
+        makeCartSummaryDto(activeAccount === 'A' ? userAServerItems : userBServerItems)
+      )
+    }
+    if (u.includes('/wishlist/')) {
+      return jsonResponse([])
+    }
+    throw new Error(`Unexpected fetch: ${method} ${u}`)
+  }
+
+  // User A logs in -> POST commits 2, response lost -> intent '101::1::champagne::standard' persisted
+  await storeMod.useStore.getState().loginUser('user-a@arustore.ir', 'StrongPass123!')
+  assert.ok(
+    storeMod.useStore.getState().pendingCartMergeIntents['101::1::champagne::standard']
+  )
+
+  // Reload browser; User A session expired; User B logs in -> User A's intent MUST NOT skip User B's merge!
+  const reloaded = simulateBrowserPageReload()
+  await reloaded.storeMod.useStore.persist.rehydrate()
+  await reloaded.storeMod.useStore.getState().bootstrapAuth()
+  assert.equal(reloaded.storeMod.useStore.getState().user, null)
+
+  await reloaded.storeMod.useStore.getState().loginUser('user-b@arustore.ir', 'StrongPass123!')
+  assert.equal(userBServerItems[0].quantity, 4)
+  assert.equal(reloaded.storeMod.useStore.getState().cart[0].quantity, 4)
+  assert.equal(reloaded.storeMod.useStore.getState().guestCart.length, 0)
+  assert.deepEqual(reloaded.storeMod.useStore.getState().pendingCartMergeIntents, {})
+
+  // Part B: Legitimate guest quantity increase (+2) after committed timeout merges only the delta (+2 -> total 4, not 2 and not 6)
+  await reloaded.storeMod.useStore.getState().logoutUser?.().catch(() => {})
+  reloaded.clientMod.clearInMemoryAccessToken()
+  reloaded.storeMod.useStore.setState({
+    user: null,
+    authStatus: 'unauthenticated',
+    hasSessionHint: false,
+    guestCart: [],
+    cart: [],
+    pendingCartMergeIntents: {},
+  })
+
+  let editServerItems = []
+  let failFirstEditPost = true
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url)
+    const method = init.method || 'GET'
+    if (u.endsWith('/auth/login/json')) {
+      return jsonResponse({
+        access_token: 'jwt-edit-user',
+        token_type: 'bearer',
+        user: { id: 303, email: 'edit@arustore.ir', full_name: 'Edit User', is_admin: false },
+      })
+    }
+    if (u.endsWith('/auth/refresh')) {
+      return jsonResponse({ detail: 'Expired' }, 401)
+    }
+    if (u.endsWith('/cart/items') && method === 'POST') {
+      const body = JSON.parse(init.body)
+      editServerItems.push({
+        id: 950,
+        product_id: 1,
+        quantity: body.quantity,
+        selected_color: prod1Dto.colors[0],
+        selected_edition: 'standard',
+        unit_price: prod1Dto.price,
+        unit_price_toman: prod1Dto.price_toman,
+        line_total: prod1Dto.price * body.quantity,
+        line_total_toman: prod1Dto.price_toman * body.quantity,
+        product: prod1Dto,
+      })
+      if (failFirstEditPost) {
+        throw new TypeError('POST response lost')
+      }
+      return jsonResponse(makeCartSummaryDto(editServerItems), 201)
+    }
+    if (u.includes('/cart/items/950') && method === 'PATCH') {
+      const { quantity } = JSON.parse(init.body)
+      editServerItems = editServerItems.map((it) => ({
+        ...it,
+        quantity,
+        line_total: it.unit_price * quantity,
+        line_total_toman: it.unit_price_toman * quantity,
+      }))
+      return jsonResponse(makeCartSummaryDto(editServerItems))
+    }
+    if (u.includes('/cart/')) {
+      return jsonResponse(makeCartSummaryDto(editServerItems))
+    }
+    if (u.includes('/wishlist/')) {
+      return jsonResponse([])
+    }
+    throw new Error(`Unexpected fetch: ${method} ${u}`)
+  }
+
+  await reloaded.storeMod.useStore.getState().addToCart(prod1, 2, prod1.colors[0], 'standard')
+  await reloaded.storeMod.useStore.getState().loginUser('edit@arustore.ir', 'StrongPass123!')
+  assert.equal(editServerItems[0].quantity, 2)
+
+  // Simulate reload + session expired -> user is guest and legitimately adds +2 more (guest qty 2 -> 4)
+  failFirstEditPost = false
+  const reloaded2 = simulateBrowserPageReload()
+  await reloaded2.storeMod.useStore.persist.rehydrate()
+  await reloaded2.storeMod.useStore.getState().bootstrapAuth()
+  assert.equal(reloaded2.storeMod.useStore.getState().user, null)
+
+  await reloaded2.storeMod.useStore.getState().addToCart(prod1, 2, prod1.colors[0], 'standard')
+  assert.equal(reloaded2.storeMod.useStore.getState().guestCart[0].quantity, 4)
+
+  // User logs back in -> server (2) + new delta (2) = 4 (neither stale 2 nor doubled 6!)
+  await reloaded2.storeMod.useStore.getState().loginUser('edit@arustore.ir', 'StrongPass123!')
+  assert.equal(editServerItems[0].quantity, 4)
+  assert.equal(reloaded2.storeMod.useStore.getState().cart[0].quantity, 4)
+  assert.equal(reloaded2.storeMod.useStore.getState().guestCart.length, 0)
+  assert.deepEqual(reloaded2.storeMod.useStore.getState().pendingCartMergeIntents, {})
+
+  // Part C: Removing a guest item immediately prunes any pending merge intent for that lineKey
+  reloaded2.clientMod.clearInMemoryAccessToken()
+  reloaded2.storeMod.useStore.setState({
+    user: null,
+    authStatus: 'unauthenticated',
+    hasSessionHint: false,
+    guestCart: [],
+    cart: [],
+    pendingCartMergeIntents: {},
+  })
+  await reloaded2.storeMod.useStore.getState().addToCart(prod1, 2, prod1.colors[0], 'standard')
+  const guestItemId = reloaded2.storeMod.useStore.getState().guestCart[0].id
+  reloaded2.storeMod.useStore.setState({
+    pendingCartMergeIntents: {
+      '303::1::champagne::standard': {
+        userId: 303,
+        lineKey: '1::champagne::standard',
+        baselineServerQuantity: 0,
+        guestQuantitySnapshot: 2,
+        targetQuantity: 2,
+      },
+    },
+  })
+  await reloaded2.storeMod.useStore.getState().removeFromCart(guestItemId)
+  assert.deepEqual(reloaded2.storeMod.useStore.getState().guestCart, [])
+  assert.deepEqual(reloaded2.storeMod.useStore.getState().pendingCartMergeIntents, {})
+})
+
+test('8. Authenticated wishlist sync deduplicates concurrent toggles and updates from server state', async () => {
   const { useStore } = storeMod
   const prod2Dto = makeBackendProductDto(2)
   let serverWishlist = []
@@ -742,7 +1214,7 @@ test('5. Authenticated wishlist sync deduplicates concurrent toggles and updates
   assert.equal(useStore.getState().authWishlistProducts.length, 0)
 })
 
-test('6. Checkout cannot fake a successful order, collect card credentials, or clear the cart', () => {
+test('9. Checkout cannot fake a successful order, collect card credentials, or clear the cart', () => {
   const { useStore } = storeMod
 
   // Store-level guard rejects simulated order creation

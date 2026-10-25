@@ -113,11 +113,92 @@ export function sanitizePersistedGuestWishlistIds(
   )
 }
 
+export interface PendingCartMergeIntent {
+  userId: number
+  lineKey: string
+  baselineServerQuantity: number
+  guestQuantitySnapshot: number
+  targetQuantity: number
+}
+
+export function sanitizePersistedMergeIntents(
+  rawIntents: unknown,
+  activeGuestCart: CartItemType[]
+): Record<string, PendingCartMergeIntent> {
+  if (!rawIntents || typeof rawIntents !== 'object' || Array.isArray(rawIntents)) {
+    return {}
+  }
+
+  const activeLineKeys = new Set(
+    activeGuestCart.map((item) =>
+      buildCartLineIdentityKey(
+        item.product,
+        item.selectedColor,
+        item.selectedEdition
+      )
+    )
+  )
+
+  const sanitized: Record<string, PendingCartMergeIntent> = {}
+  for (const [key, rawVal] of Object.entries(
+    rawIntents as Record<string, unknown>
+  )) {
+    if (!rawVal || typeof rawVal !== 'object' || Array.isArray(rawVal)) {
+      continue
+    }
+    const candidate = rawVal as Partial<PendingCartMergeIntent>
+    if (
+      typeof candidate.userId !== 'number' ||
+      !Number.isInteger(candidate.userId) ||
+      candidate.userId <= 0 ||
+      typeof candidate.lineKey !== 'string' ||
+      !candidate.lineKey.trim() ||
+      typeof candidate.baselineServerQuantity !== 'number' ||
+      !Number.isInteger(candidate.baselineServerQuantity) ||
+      candidate.baselineServerQuantity < 0 ||
+      typeof candidate.guestQuantitySnapshot !== 'number' ||
+      !Number.isInteger(candidate.guestQuantitySnapshot) ||
+      candidate.guestQuantitySnapshot < 1 ||
+      typeof candidate.targetQuantity !== 'number' ||
+      !Number.isInteger(candidate.targetQuantity) ||
+      candidate.targetQuantity <= candidate.baselineServerQuantity
+    ) {
+      continue
+    }
+
+    const expectedKey = `${candidate.userId}::${candidate.lineKey}`
+    if (key !== expectedKey || !activeLineKeys.has(candidate.lineKey)) {
+      continue
+    }
+
+    sanitized[expectedKey] = {
+      userId: candidate.userId,
+      lineKey: candidate.lineKey,
+      baselineServerQuantity: candidate.baselineServerQuantity,
+      guestQuantitySnapshot: candidate.guestQuantitySnapshot,
+      targetQuantity: candidate.targetQuantity,
+    }
+  }
+
+  return sanitized
+}
+
+function pruneMergeIntentsForGuestCart(
+  intents: Record<string, PendingCartMergeIntent>,
+  guestCart: CartItemType[]
+): Record<string, PendingCartMergeIntent> {
+  if (!intents || Object.keys(intents).length === 0) {
+    return {}
+  }
+  return sanitizePersistedMergeIntents(intents, guestCart)
+}
+
 export interface PersistedAppSlice {
   locale: Locale
   hasSessionHint: boolean
   guestCart: CartItemType[]
   guestWishlistIds: number[]
+  pendingCartMergeIntents: Record<string, PendingCartMergeIntent>
   orders: Order[]
 }
 
@@ -131,6 +212,7 @@ export function migratePersistedStoreState(
       hasSessionHint: false,
       guestCart: [],
       guestWishlistIds: [],
+      pendingCartMergeIntents: {},
       orders: [],
     }
   }
@@ -146,12 +228,20 @@ export function migratePersistedStoreState(
   )
   const migratedGuestWishlist =
     version >= 3 ? sanitizePersistedGuestWishlistIds(raw.guestWishlistIds) : []
+  const migratedMergeIntents =
+    version >= 3
+      ? sanitizePersistedMergeIntents(
+          raw.pendingCartMergeIntents,
+          migratedGuestCart
+        )
+      : {}
 
   return {
     locale: preservedLocale,
     hasSessionHint: version >= 2 ? Boolean(raw.hasSessionHint) : false,
     guestCart: migratedGuestCart,
     guestWishlistIds: migratedGuestWishlist,
+    pendingCartMergeIntents: migratedMergeIntents,
     orders: cleanedOrders,
   }
 }
@@ -178,6 +268,7 @@ interface AppState {
   // Active effective cart view (`authCartSummary.items` when authenticated, `guestCart` when guest)
   cart: CartItemType[]
   guestCart: CartItemType[]
+  pendingCartMergeIntents: Record<string, PendingCartMergeIntent>
   authCartSummary: ServerCartSummary | null
   authPromoCode: string | null
   cartLoading: boolean
@@ -249,16 +340,12 @@ interface AppState {
 let inFlightBootstrap: Promise<UserProfile | null> | null = null
 let inFlightAccountSync: Promise<void> | null = null
 
-// Tracks computed target quantities per `${userId}::${lineKey}` so retried merges
-// after a network timeout never double-add guest quantities.
-const pendingMergeTargetQuantities = new Map<string, number>()
-
 // Prevents duplicate concurrent wishlist toggle requests per productId.
 const inFlightWishlistProductIds = new Set<number>()
 
 export function resetCartWishlistRuntimeLocks(): void {
+  inFlightBootstrap = null
   inFlightAccountSync = null
-  pendingMergeTargetQuantities.clear()
   inFlightWishlistProductIds.clear()
 }
 
@@ -349,6 +436,7 @@ export const useStore = create<AppState>()(
 
       cart: [],
       guestCart: [],
+      pendingCartMergeIntents: {},
       authCartSummary: null,
       authPromoCode: null,
       cartLoading: false,
@@ -631,7 +719,15 @@ export const useStore = create<AppState>()(
 
         if (quantity === 0) {
           const nextGuest = currentGuest.filter((item) => item.id !== itemId)
-          set({ guestCart: nextGuest, cart: nextGuest, cartError: null })
+          set((state) => ({
+            guestCart: nextGuest,
+            cart: nextGuest,
+            pendingCartMergeIntents: pruneMergeIntentsForGuestCart(
+              state.pendingCartMergeIntents,
+              nextGuest
+            ),
+            cartError: null,
+          }))
           return true
         }
 
@@ -717,7 +813,15 @@ export const useStore = create<AppState>()(
         }
 
         const nextGuest = get().guestCart.filter((item) => item.id !== itemId)
-        set({ guestCart: nextGuest, cart: nextGuest, cartError: null })
+        set((state) => ({
+          guestCart: nextGuest,
+          cart: nextGuest,
+          pendingCartMergeIntents: pruneMergeIntentsForGuestCart(
+            state.pendingCartMergeIntents,
+            nextGuest
+          ),
+          cartError: null,
+        }))
         return true
       },
 
@@ -754,6 +858,7 @@ export const useStore = create<AppState>()(
         set({
           guestCart: [],
           cart: [],
+          pendingCartMergeIntents: {},
           promoCode: null,
           promoPercent: 0,
           cartError: null,
@@ -1041,7 +1146,7 @@ export const useStore = create<AppState>()(
                 guestItem.selectedColor,
                 guestItem.selectedEdition
               )
-              const targetMapKey = `${currentUser.id}::${lineKey}`
+              const intentKey = `${currentUser.id}::${lineKey}`
 
               const existingServerItem = serverCart.items.find(
                 (si) =>
@@ -1051,14 +1156,70 @@ export const useStore = create<AppState>()(
                     si.selectedEdition
                   ) === lineKey
               )
+              const currentServerQty = existingServerItem
+                ? existingServerItem.quantity
+                : 0
 
-              let targetQty = pendingMergeTargetQuantities.get(targetMapKey)
-              if (targetQty === undefined) {
-                targetQty =
-                  (existingServerItem ? existingServerItem.quantity : 0) +
-                  guestItem.quantity
-                pendingMergeTargetQuantities.set(targetMapKey, targetQty)
+              const existingIntent = get().pendingCartMergeIntents[intentKey]
+              let effectiveGuestQtyToMerge = guestItem.quantity
+
+              if (
+                existingIntent &&
+                existingIntent.userId === currentUser.id &&
+                existingIntent.lineKey === lineKey &&
+                currentServerQty === existingIntent.targetQuantity
+              ) {
+                // Prior merge mutation for this user + variant already committed on the server!
+                const remainingDelta =
+                  guestItem.quantity - existingIntent.guestQuantitySnapshot
+
+                if (remainingDelta <= 0) {
+                  // Confirmed in reloaded serverCart: remove guest entry and clear intent without re-sending!
+                  set((state) => {
+                    const nextGuestCart = state.guestCart.filter(
+                      (g) => g.id !== guestItem.id
+                    )
+                    const nextIntents = { ...state.pendingCartMergeIntents }
+                    delete nextIntents[intentKey]
+                    return {
+                      guestCart: nextGuestCart,
+                      pendingCartMergeIntents: pruneMergeIntentsForGuestCart(
+                        nextIntents,
+                        nextGuestCart
+                      ),
+                    }
+                  })
+                  continue
+                }
+
+                // Guest legitimately added extra units after the committed snapshot:
+                // reconcile the confirmed portion out of guestCart before merging the remaining delta.
+                effectiveGuestQtyToMerge = remainingDelta
+                set((state) => ({
+                  guestCart: state.guestCart.map((g) =>
+                    g.id === guestItem.id
+                      ? { ...g, quantity: remainingDelta }
+                      : g
+                  ),
+                }))
               }
+
+              const targetQty = currentServerQty + effectiveGuestQtyToMerge
+
+              // Durably persist merge intent BEFORE issuing the server POST/PATCH
+              const nextIntent: PendingCartMergeIntent = {
+                userId: currentUser.id,
+                lineKey,
+                baselineServerQuantity: currentServerQty,
+                guestQuantitySnapshot: effectiveGuestQtyToMerge,
+                targetQuantity: targetQty,
+              }
+              set((state) => ({
+                pendingCartMergeIntents: {
+                  ...state.pendingCartMergeIntents,
+                  [intentKey]: nextIntent,
+                },
+              }))
 
               try {
                 if (existingServerItem && existingServerItem.serverItemId) {
@@ -1094,22 +1255,34 @@ export const useStore = create<AppState>()(
                   mutatedCart = true
                 }
 
-                // Confirmed on server: remove ONLY this guest cart entry
-                pendingMergeTargetQuantities.delete(targetMapKey)
-                set((state) => ({
-                  guestCart: state.guestCart.filter(
+                // Confirmed on server: remove ONLY this guest cart entry and clear its merge intent
+                set((state) => {
+                  const nextGuestCart = state.guestCart.filter(
                     (g) => g.id !== guestItem.id
-                  ),
-                }))
+                  )
+                  const nextIntents = { ...state.pendingCartMergeIntents }
+                  delete nextIntents[intentKey]
+                  return {
+                    guestCart: nextGuestCart,
+                    pendingCartMergeIntents: pruneMergeIntentsForGuestCart(
+                      nextIntents,
+                      nextGuestCart
+                    ),
+                  }
+                })
               } catch (mergeErr) {
                 // Deterministic 4xx validation error means server did NOT commit;
-                // clear cached target so future edits recalculate cleanly, while preserving guest item!
+                // clear durable intent so future edits recalculate cleanly, while preserving guest item!
                 if (
                   mergeErr instanceof ApiError &&
                   mergeErr.status >= 400 &&
                   mergeErr.status < 500
                 ) {
-                  pendingMergeTargetQuantities.delete(targetMapKey)
+                  set((state) => {
+                    const nextIntents = { ...state.pendingCartMergeIntents }
+                    delete nextIntents[intentKey]
+                    return { pendingCartMergeIntents: nextIntents }
+                  })
                 }
                 mergeWarnings.push(
                   extractMessage(
@@ -1301,7 +1474,6 @@ export const useStore = create<AppState>()(
 
       logoutUser: async () => {
         await aruApi.auth.logout()
-        pendingMergeTargetQuantities.clear()
         inFlightWishlistProductIds.clear()
         set({
           user: null,
@@ -1313,6 +1485,7 @@ export const useStore = create<AppState>()(
           authWishlistIds: [],
           guestCart: [],
           guestWishlistIds: [],
+          pendingCartMergeIntents: {},
           cart: [],
           wishlistIds: [],
           promoCode: null,
@@ -1482,6 +1655,7 @@ export const useStore = create<AppState>()(
         hasSessionHint: state.hasSessionHint,
         guestCart: state.guestCart,
         guestWishlistIds: state.guestWishlistIds,
+        pendingCartMergeIntents: state.pendingCartMergeIntents,
         orders: state.orders,
       }),
       merge: (persistedState, currentState) => {
@@ -1495,12 +1669,17 @@ export const useStore = create<AppState>()(
         const hydratedGuestWishlistIds = sanitizePersistedGuestWishlistIds(
           raw.guestWishlistIds
         )
+        const hydratedMergeIntents = sanitizePersistedMergeIntents(
+          raw.pendingCartMergeIntents,
+          hydratedGuestCart
+        )
         return {
           ...currentState,
           locale: raw.locale === 'en' ? 'en' : currentState.locale,
           hasSessionHint: Boolean(raw.hasSessionHint),
           guestCart: hydratedGuestCart,
           guestWishlistIds: hydratedGuestWishlistIds,
+          pendingCartMergeIntents: hydratedMergeIntents,
           cart: hydratedGuestCart,
           wishlistIds: hydratedGuestWishlistIds,
           orders: sanitizePersistedOrders(raw.orders),
