@@ -307,44 +307,133 @@ async def test_admin_endpoints_enforce_401_anonymous_and_403_normal_user(
     assert prod_write.status_code == 403
 
 
+async def test_browser_register_and_login_set_httponly_cookie_without_json_refresh_token(
+    client: AsyncClient,
+) -> None:
+    expected_browser_keys = {"access_token", "token_type", "expires_in", "user"}
+
+    # 1. Browser Registration: sets HttpOnly cookie and NEVER returns refresh_token in JSON
+    reg_res = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "parisa.p0a1@arustore.ir",
+            "full_name": "پریسا احمدی",
+            "password": "StrongBrowserPassword123!",
+        },
+    )
+    assert reg_res.status_code == 201
+    reg_json = reg_res.json()
+    assert set(reg_json.keys()) == expected_browser_keys
+    assert "refresh_token" not in reg_json
+    reg_cookie = reg_res.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert reg_cookie
+    assert reg_cookie not in reg_res.text
+    reg_set_cookie = reg_res.headers.get("set-cookie", "")
+    assert "HttpOnly" in reg_set_cookie
+    assert "Path=/api/v1/auth" in reg_set_cookie
+    assert "SameSite=lax" in reg_set_cookie
+
+    # 2. Browser JSON Login: sets HttpOnly cookie and NEVER returns refresh_token in JSON
+    json_login_res = await client.post(
+        "/api/v1/auth/login/json",
+        json={
+            "email_or_username": "parisa.p0a1@arustore.ir",
+            "password": "StrongBrowserPassword123!",
+        },
+    )
+    assert json_login_res.status_code == 200
+    json_login_body = json_login_res.json()
+    assert set(json_login_body.keys()) == expected_browser_keys
+    assert "refresh_token" not in json_login_body
+    login_cookie = json_login_res.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert login_cookie
+    assert login_cookie not in json_login_res.text
+    assert "HttpOnly" in json_login_res.headers.get("set-cookie", "")
+
+    # 3. OAuth2 Form Login: sets HttpOnly cookie and NEVER returns refresh_token in JSON
+    form_login_res = await client.post(
+        "/api/v1/auth/login",
+        data={
+            "username": "parisa.p0a1@arustore.ir",
+            "password": "StrongBrowserPassword123!",
+        },
+    )
+    assert form_login_res.status_code == 200
+    form_login_body = form_login_res.json()
+    assert set(form_login_body.keys()) == expected_browser_keys
+    assert "refresh_token" not in form_login_body
+    form_cookie = form_login_res.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert form_cookie
+    assert form_cookie not in form_login_res.text
+    assert "HttpOnly" in form_login_res.headers.get("set-cookie", "")
+
+
 async def test_refresh_cookie_rotation_reuse_prevention_and_full_session_logout(
     client: AsyncClient,
 ) -> None:
+    expected_browser_keys = {"access_token", "token_type", "expires_in", "user"}
+
     login_res = await client.post(
         "/api/v1/auth/login/json",
         json={"email_or_username": "arian@arustore.ir", "password": "Arian1234!"},
     )
     assert login_res.status_code == 200
-    first_tokens = login_res.json()
-    first_access = first_tokens["access_token"]
-    first_refresh = first_tokens["refresh_token"]
-    refresh_cookie = login_res.cookies.get(settings.REFRESH_COOKIE_NAME)
-    assert refresh_cookie == first_refresh
+    first_body = login_res.json()
+    assert set(first_body.keys()) == expected_browser_keys
+    assert "refresh_token" not in first_body
+    first_cookie = login_res.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert first_cookie
+    assert first_cookie not in login_res.text
 
-    # Browser-style refresh using ONLY HttpOnly cookie (empty JSON body)
+    # Calling /api/v1/auth/refresh without cookie (even with JSON body) must fail with 401
+    client.cookies.clear()
+    no_cookie_res = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": first_cookie},
+    )
+    assert no_cookie_res.status_code == 401
+
+    # Cookie-based refresh rotates HttpOnly cookie and omits refresh_token from JSON
     cookie_refresh_res = await client.post(
         "/api/v1/auth/refresh",
-        cookies={settings.REFRESH_COOKIE_NAME: refresh_cookie},
+        cookies={settings.REFRESH_COOKIE_NAME: first_cookie},
     )
     assert cookie_refresh_res.status_code == 200
-    second_tokens = cookie_refresh_res.json()
-    second_access = second_tokens["access_token"]
-    second_refresh = second_tokens["refresh_token"]
-    assert second_refresh != first_refresh
+    second_body = cookie_refresh_res.json()
+    assert set(second_body.keys()) == expected_browser_keys
+    assert "refresh_token" not in second_body
+    second_access = second_body["access_token"]
+    second_cookie = cookie_refresh_res.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert second_cookie
+    assert second_cookie != first_cookie
+    assert second_cookie not in cookie_refresh_res.text
+    assert first_cookie not in cookie_refresh_res.text
+    assert "HttpOnly" in cookie_refresh_res.headers.get("set-cookie", "")
 
-    # Reusing the rotated first refresh token must fail with 401
-    reused_res = await client.post(
+    # Reusing the rotated first refresh cookie must fail with 401 on both endpoints
+    client.cookies.clear()
+    reused_cookie_res = await client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": first_refresh},
+        cookies={settings.REFRESH_COOKIE_NAME: first_cookie},
     )
-    assert reused_res.status_code == 401
+    assert reused_cookie_res.status_code == 401
 
-    # Logout with current access token must revoke BOTH access token AND associated refresh token
+    reused_body_res = await client.post(
+        "/api/v1/auth/token/refresh",
+        json={"refresh_token": first_cookie},
+    )
+    assert reused_body_res.status_code == 401
+
+    # Logout clears the HttpOnly cookie and revokes BOTH access token AND refresh session
     logout_res = await client.post(
         "/api/v1/auth/logout",
         headers={"Authorization": f"Bearer {second_access}"},
+        cookies={settings.REFRESH_COOKIE_NAME: second_cookie},
     )
     assert logout_res.status_code == 200
+    logout_set_cookie = logout_res.headers.get("set-cookie", "")
+    assert settings.REFRESH_COOKIE_NAME in logout_set_cookie
+    assert "Max-Age=0" in logout_set_cookie or '=""' in logout_set_cookie
 
     # Revoked access token fails on /users/me
     me_after_logout = await client.get(
@@ -353,18 +442,80 @@ async def test_refresh_cookie_rotation_reuse_prevention_and_full_session_logout(
     )
     assert me_after_logout.status_code == 401
 
-    # Associated refresh token from the logged-out session cannot mint a new access token
-    refresh_after_logout = await client.post(
-        "/api/v1/auth/refresh",
-        json={"refresh_token": second_refresh},
-    )
-    assert refresh_after_logout.status_code == 401
-
+    # Replaying the logged-out refresh token fails on both cookie and programmatic endpoints
+    client.cookies.clear()
     cookie_refresh_after_logout = await client.post(
         "/api/v1/auth/refresh",
-        cookies={settings.REFRESH_COOKIE_NAME: second_refresh},
+        cookies={settings.REFRESH_COOKIE_NAME: second_cookie},
     )
     assert cookie_refresh_after_logout.status_code == 401
+
+    token_refresh_after_logout = await client.post(
+        "/api/v1/auth/token/refresh",
+        json={"refresh_token": second_cookie},
+    )
+    assert token_refresh_after_logout.status_code == 401
+
+
+async def test_non_browser_api_token_contract_is_explicit_and_cookie_isolated(
+    client: AsyncClient,
+) -> None:
+    # 1. Explicit programmatic login (/auth/token) returns TokenResponse and sets NO cookie
+    tok_res = await client.post(
+        "/api/v1/auth/token",
+        json={"email_or_username": "arian@arustore.ir", "password": "Arian1234!"},
+    )
+    assert tok_res.status_code == 200
+    assert "set-cookie" not in tok_res.headers
+    tok_body = tok_res.json()
+    assert set(tok_body.keys()) == {
+        "access_token",
+        "refresh_token",
+        "token_type",
+        "expires_in",
+        "user",
+    }
+    first_refresh = tok_body["refresh_token"]
+
+    # 2. /auth/token/refresh ignores cookies if JSON body is omitted (prevents browser XSS cookie abuse)
+    cookie_only_attempt = await client.post(
+        "/api/v1/auth/token/refresh",
+        cookies={settings.REFRESH_COOKIE_NAME: first_refresh},
+    )
+    assert cookie_only_attempt.status_code == 422
+
+    # 3. Explicit JSON body refresh rotates token pair and sets NO cookie
+    rot_res = await client.post(
+        "/api/v1/auth/token/refresh",
+        json={"refresh_token": first_refresh},
+    )
+    assert rot_res.status_code == 200
+    assert "set-cookie" not in rot_res.headers
+    rot_body = rot_res.json()
+    second_access = rot_body["access_token"]
+    second_refresh = rot_body["refresh_token"]
+    assert second_refresh != first_refresh
+
+    # Old refresh token cannot be reused
+    reuse_attempt = await client.post(
+        "/api/v1/auth/token/refresh",
+        json={"refresh_token": first_refresh},
+    )
+    assert reuse_attempt.status_code == 401
+
+    # 4. Headless logout revokes both access and refresh tokens
+    out_res = await client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {second_access}"},
+        json={"refresh_token": second_refresh},
+    )
+    assert out_res.status_code == 200
+
+    after_out = await client.post(
+        "/api/v1/auth/token/refresh",
+        json={"refresh_token": second_refresh},
+    )
+    assert after_out.status_code == 401
 
 
 async def test_expired_and_malformed_tokens_return_controlled_401_errors(
@@ -377,11 +528,17 @@ async def test_expired_and_malformed_tokens_return_controlled_401_errors(
     )
     assert malformed_me.status_code == 401
 
-    malformed_refresh = await client.post(
+    malformed_cookie_refresh = await client.post(
         "/api/v1/auth/refresh",
+        cookies={settings.REFRESH_COOKIE_NAME: "malformed-token"},
+    )
+    assert malformed_cookie_refresh.status_code == 401
+
+    malformed_body_refresh = await client.post(
+        "/api/v1/auth/token/refresh",
         json={"refresh_token": "malformed-token"},
     )
-    assert malformed_refresh.status_code == 401
+    assert malformed_body_refresh.status_code == 401
 
     malformed_logout = await client.post(
         "/api/v1/auth/logout",
@@ -405,11 +562,17 @@ async def test_expired_and_malformed_tokens_return_controlled_401_errors(
     )
     assert exp_me.status_code == 401
 
-    exp_ref = await client.post(
+    exp_cookie_ref = await client.post(
         "/api/v1/auth/refresh",
+        cookies={settings.REFRESH_COOKIE_NAME: expired_refresh},
+    )
+    assert exp_cookie_ref.status_code == 401
+
+    exp_body_ref = await client.post(
+        "/api/v1/auth/token/refresh",
         json={"refresh_token": expired_refresh},
     )
-    assert exp_ref.status_code == 401
+    assert exp_body_ref.status_code == 401
 
     # Valid signature with non-numeric `sub` must return 401, never 500 ValueError
     non_int_sub_access = create_access_token(
@@ -427,7 +590,7 @@ async def test_expired_and_malformed_tokens_return_controlled_401_errors(
 
     bad_sub_ref = await client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": non_int_sub_refresh},
+        cookies={settings.REFRESH_COOKIE_NAME: non_int_sub_refresh},
     )
     assert bad_sub_ref.status_code == 401
 
@@ -450,9 +613,9 @@ async def test_redis_failure_in_production_fails_closed_without_memory_fallback(
         json={"email_or_username": "arian@arustore.ir", "password": "Arian1234!"},
     )
     assert login_res.status_code == 200
-    tokens = login_res.json()
-    access = tokens["access_token"]
-    refresh = tokens["refresh_token"]
+    access = login_res.json()["access_token"]
+    refresh_cookie = login_res.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert refresh_cookie
 
     # Point a fresh CacheManager at an unreachable Redis port while ENVIRONMENT=production
     unreachable_cache = CacheManager("redis://127.0.0.1:63999/0")
@@ -468,7 +631,7 @@ async def test_redis_failure_in_production_fails_closed_without_memory_fallback(
     assert logout_res.status_code == 503
     assert unreachable_cache._memory_store == {}
 
-    # 2. Protected endpoints & token refresh fail closed (503) instead of bypassing revocation
+    # 2. Protected endpoints & cookie/token refresh fail closed (503) instead of bypassing revocation
     me_res = await client.get(
         "/api/v1/users/me",
         headers={"Authorization": f"Bearer {access}"},
@@ -477,7 +640,7 @@ async def test_redis_failure_in_production_fails_closed_without_memory_fallback(
 
     ref_res = await client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": refresh},
+        cookies={settings.REFRESH_COOKIE_NAME: refresh_cookie},
     )
     assert ref_res.status_code == 503
 

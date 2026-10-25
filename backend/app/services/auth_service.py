@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 import uuid
@@ -17,9 +18,39 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.user import TokenResponse, UserCreate, UserResponse
+from app.schemas.user import (
+    AuthSessionResponse,
+    TokenResponse,
+    UserCreate,
+    UserResponse,
+)
 from app.tasks.email_tasks import send_welcome_email_task
 from app.utils.slugify import generate_slug
+
+
+@dataclass(frozen=True)
+class IssuedAuthTokens:
+    access_token: str
+    refresh_token: str
+    expires_in: int
+    user: UserResponse
+
+    def to_browser_session(self) -> AuthSessionResponse:
+        return AuthSessionResponse(
+            access_token=self.access_token,
+            token_type="bearer",
+            expires_in=self.expires_in,
+            user=self.user,
+        )
+
+    def to_token_pair(self) -> TokenResponse:
+        return TokenResponse(
+            access_token=self.access_token,
+            refresh_token=self.refresh_token,
+            token_type="bearer",
+            expires_in=self.expires_in,
+            user=self.user,
+        )
 
 
 class AuthService:
@@ -28,7 +59,7 @@ class AuthService:
 
     async def _build_tokens(
         self, user: User, session_id: Optional[str] = None
-    ) -> TokenResponse:
+    ) -> IssuedAuthTokens:
         stmt = (
             select(User)
             .options(selectinload(User.addresses))
@@ -43,13 +74,15 @@ class AuthService:
         }
         access_token = create_access_token(subject)
         refresh_token = create_refresh_token(subject)
-        return TokenResponse(
+        expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        return IssuedAuthTokens(
             access_token=access_token,
             refresh_token=refresh_token,
+            expires_in=expires_in,
             user=UserResponse.model_validate(loaded_user),
         )
 
-    async def register_user(self, data: UserCreate) -> TokenResponse:
+    async def register_user(self, data: UserCreate) -> IssuedAuthTokens:
         slug_candidate = generate_slug(data.email.split("@")[0])
         if not slug_candidate or len(slug_candidate) < 3:
             slug_candidate = f"user-{uuid.uuid4().hex[:6]}"
@@ -103,7 +136,7 @@ class AuthService:
 
         return await self._build_tokens(user)
 
-    async def login_user(self, identifier: str, password: str) -> TokenResponse:
+    async def login_user(self, identifier: str, password: str) -> IssuedAuthTokens:
         ident = identifier.strip()
         if not ident or not password:
             raise HTTPException(
@@ -128,7 +161,7 @@ class AuthService:
         await self.db.commit()
         return await self._build_tokens(user)
 
-    async def refresh_token(self, refresh_token_str: str) -> TokenResponse:
+    async def refresh_token(self, refresh_token_str: str) -> IssuedAuthTokens:
         payload = decode_token(refresh_token_str)
         if not payload or payload.get("type") != "refresh":
             raise HTTPException(

@@ -27,10 +27,10 @@ export interface BackendUserDto {
   created_at?: string | null
 }
 
-interface BackendTokenResponse {
+export interface BrowserAuthSessionResponse {
   access_token: string
-  refresh_token: string
   token_type: string
+  expires_in: number
   user: BackendUserDto
 }
 
@@ -133,7 +133,7 @@ async function refreshSessionSingleFlight(): Promise<UserProfile | null> {
         authSyncCallbacks.onSessionCleared?.()
         return null
       }
-      const data = (await response.json()) as BackendTokenResponse
+      const data = (await response.json()) as BrowserAuthSessionResponse
       setInMemoryAccessToken(data.access_token)
       const profile = mapBackendUserToProfile(data.user)
       authSyncCallbacks.onUserUpdated?.(profile)
@@ -217,12 +217,15 @@ export const aruApi = {
       phone?: string
       username?: string
     }): Promise<{ user: UserProfile }> => {
-      const payload = await apiFetch<BackendTokenResponse>('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(data),
-        token: null,
-        skipAuthRefresh: true,
-      })
+      const payload = await apiFetch<BrowserAuthSessionResponse>(
+        '/auth/register',
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+          token: null,
+          skipAuthRefresh: true,
+        }
+      )
       setInMemoryAccessToken(payload.access_token)
       return { user: mapBackendUserToProfile(payload.user) }
     },
@@ -231,12 +234,15 @@ export const aruApi = {
       email_or_username: string,
       password: string
     ): Promise<{ user: UserProfile }> => {
-      const payload = await apiFetch<BackendTokenResponse>('/auth/login/json', {
-        method: 'POST',
-        body: JSON.stringify({ email_or_username, password }),
-        token: null,
-        skipAuthRefresh: true,
-      })
+      const payload = await apiFetch<BrowserAuthSessionResponse>(
+        '/auth/login/json',
+        {
+          method: 'POST',
+          body: JSON.stringify({ email_or_username, password }),
+          token: null,
+          skipAuthRefresh: true,
+        }
+      )
       setInMemoryAccessToken(payload.access_token)
       return { user: mapBackendUserToProfile(payload.user) }
     },

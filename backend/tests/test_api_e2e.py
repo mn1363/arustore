@@ -67,9 +67,10 @@ async def test_auth_register_login_refresh_profile_and_logout(client: AsyncClien
     )
     assert reg_res.status_code == 201
     tokens = reg_res.json()
+    assert "refresh_token" not in tokens
     access = tokens["access_token"]
-    refresh = tokens["refresh_token"]
     assert tokens["user"]["phone"] == "09129876543"
+    assert "aru_refresh_token" in reg_res.cookies
 
     headers = {"Authorization": f"Bearer {access}"}
     me_res = await client.get("/api/v1/users/me", headers=headers)
@@ -91,12 +92,11 @@ async def test_auth_register_login_refresh_profile_and_logout(client: AsyncClien
     )
     assert addr_res.status_code == 201
 
-    ref_res = await client.post(
-        "/api/v1/auth/refresh",
-        json={"refresh_token": refresh},
-    )
+    ref_res = await client.post("/api/v1/auth/refresh")
     assert ref_res.status_code == 200
-    new_access = ref_res.json()["access_token"]
+    ref_body = ref_res.json()
+    assert "refresh_token" not in ref_body
+    new_access = ref_body["access_token"]
 
     logout_res = await client.post(
         "/api/v1/auth/logout",

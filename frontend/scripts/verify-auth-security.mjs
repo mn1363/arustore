@@ -172,11 +172,11 @@ test('2. Legacy persisted demo admin session & demo orders are invalidated while
   assert.equal(storeMod.useStore.getState().user, null)
 })
 
-test('3. Login, Register, and Logout call real backend endpoints and never store tokens in localStorage', async () => {
+test('3. Login, Register, Cookie Refresh, and Logout never persist tokens in localStorage or Zustand', async () => {
   const calls = []
 
   globalThis.fetch = async (url, init = {}) => {
-    calls.push({ url: String(url), method: init.method || 'GET', body: init.body, headers: init.headers })
+    calls.push({ url: String(url), method: init.method || 'GET', body: init.body, credentials: init.credentials })
 
     if (String(url).endsWith('/auth/login/json')) {
       const parsed = JSON.parse(init.body)
@@ -189,8 +189,8 @@ test('3. Login, Register, and Logout call real backend endpoints and never store
       return new Response(
         JSON.stringify({
           access_token: 'mem-access-jwt-123',
-          refresh_token: 'cookie-refresh-jwt-456',
           token_type: 'bearer',
+          expires_in: 3600,
           user: {
             id: 42,
             email: parsed.email_or_username,
@@ -209,8 +209,8 @@ test('3. Login, Register, and Logout call real backend endpoints and never store
       return new Response(
         JSON.stringify({
           access_token: 'reg-access-jwt-789',
-          refresh_token: 'reg-refresh-jwt-999',
           token_type: 'bearer',
+          expires_in: 3600,
           user: {
             id: 43,
             email: parsed.email,
@@ -221,6 +221,27 @@ test('3. Login, Register, and Logout call real backend endpoints and never store
           },
         }),
         { status: 201, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (String(url).endsWith('/auth/refresh')) {
+      assert.equal(init.credentials, 'include')
+      assert.equal(init.body, undefined)
+      return new Response(
+        JSON.stringify({
+          access_token: 'rotated-access-jwt-555',
+          token_type: 'bearer',
+          expires_in: 3600,
+          user: {
+            id: 42,
+            email: 'real@arustore.ir',
+            username: 'realcustomer',
+            full_name: 'کاربر واقعی',
+            is_admin: false,
+            is_verified: true,
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
@@ -242,7 +263,7 @@ test('3. Login, Register, and Logout call real backend endpoints and never store
   assert.equal(storeMod.useStore.getState().user, null)
   assert.equal(clientMod.getInMemoryAccessToken(), null)
 
-  // Valid login sets user from backend and keeps access token in memory only
+  // Valid login sets user from backend and keeps access token strictly in closure memory
   const loggedIn = await storeMod.useStore
     .getState()
     .loginUser('real@arustore.ir', 'CorrectPass123!')
@@ -252,15 +273,31 @@ test('3. Login, Register, and Logout call real backend endpoints and never store
 
   const rawPersisted = mockLocalStorage.getItem('arustore-aluminum-v3') || ''
   assert.equal(rawPersisted.includes('mem-access-jwt-123'), false)
-  assert.equal(rawPersisted.includes('cookie-refresh-jwt-456'), false)
+  assert.equal(rawPersisted.includes('access_token'), false)
+  assert.equal(rawPersisted.includes('refresh_token'), false)
   assert.equal(rawPersisted.includes('real@arustore.ir'), false)
+
+  const zustandSnapshot = JSON.stringify(storeMod.useStore.getState())
+  assert.equal(zustandSnapshot.includes('mem-access-jwt-123'), false)
+  assert.equal(zustandSnapshot.includes('refresh_token'), false)
+
+  // Cookie-only refresh rotates in-memory access token without JSON refresh_token
+  const refreshedProfile = await clientMod.aruApi.auth.refresh()
+  assert.equal(refreshedProfile?.email, 'real@arustore.ir')
+  assert.equal(clientMod.getInMemoryAccessToken(), 'rotated-access-jwt-555')
+  assert.equal(
+    (mockLocalStorage.getItem('arustore-aluminum-v3') || '').includes(
+      'rotated-access-jwt-555'
+    ),
+    false
+  )
 
   // Logout calls /auth/logout and clears memory token + user
   await storeMod.useStore.getState().logoutUser()
   assert.equal(storeMod.useStore.getState().user, null)
   assert.equal(clientMod.getInMemoryAccessToken(), null)
 
-  // Register calls /auth/register with exact schema
+  // Register calls /auth/register with exact schema and never persists tokens
   const registered = await storeMod.useStore.getState().registerUser({
     email: 'fresh@arustore.ir',
     full_name: 'مشتری جدید',
@@ -269,6 +306,12 @@ test('3. Login, Register, and Logout call real backend endpoints and never store
   assert.equal(registered.email, 'fresh@arustore.ir')
   assert.equal(registered.is_admin, false)
   assert.equal(calls.some((c) => c.url.endsWith('/auth/register')), true)
+  assert.equal(
+    (mockLocalStorage.getItem('arustore-aluminum-v3') || '').includes(
+      'reg-access-jwt-789'
+    ),
+    false
+  )
 })
 
 test('4. Admin route verification never trusts cached role state and enforces backend /users/me check', async () => {

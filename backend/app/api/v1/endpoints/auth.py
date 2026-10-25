@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.common import MessageResponse
 from app.schemas.user import (
+    AuthSessionResponse,
     LogoutRequest,
     RefreshTokenRequest,
     TokenResponse,
@@ -42,59 +43,86 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=AuthSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def register(
     user_data: UserCreate,
     response: Response,
     db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
-    token_resp = await AuthService(db).register_user(user_data)
-    _set_refresh_cookie(response, token_resp.refresh_token)
-    return token_resp
+) -> AuthSessionResponse:
+    """Register a user account, set an HttpOnly refresh cookie, and return an access session without exposing `refresh_token` in JSON."""
+    issued = await AuthService(db).register_user(user_data)
+    _set_refresh_cookie(response, issued.refresh_token)
+    return issued.to_browser_session()
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=AuthSessionResponse)
 async def login_form(
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
-    token_resp = await AuthService(db).login_user(form_data.username, form_data.password)
-    _set_refresh_cookie(response, token_resp.refresh_token)
-    return token_resp
+) -> AuthSessionResponse:
+    """OAuth2 form login. Sets an HttpOnly refresh cookie and omits `refresh_token` from JSON."""
+    issued = await AuthService(db).login_user(form_data.username, form_data.password)
+    _set_refresh_cookie(response, issued.refresh_token)
+    return issued.to_browser_session()
 
 
-@router.post("/login/json", response_model=TokenResponse)
+@router.post("/login/json", response_model=AuthSessionResponse)
 async def login_json(
     credentials: UserLogin,
     response: Response,
     db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
-    token_resp = await AuthService(db).login_user(
+) -> AuthSessionResponse:
+    """Browser JSON login. Sets an HttpOnly refresh cookie and omits `refresh_token` from JSON."""
+    issued = await AuthService(db).login_user(
         credentials.email_or_username, credentials.password
     )
-    _set_refresh_cookie(response, token_resp.refresh_token)
-    return token_resp
+    _set_refresh_cookie(response, issued.refresh_token)
+    return issued.to_browser_session()
 
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(
+@router.post("/refresh", response_model=AuthSessionResponse)
+async def refresh_cookie_session(
     request: Request,
     response: Response,
-    payload: Optional[RefreshTokenRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
-    raw_refresh = (
-        payload.refresh_token if payload and payload.refresh_token else None
-    ) or request.cookies.get(settings.REFRESH_COOKIE_NAME)
+) -> AuthSessionResponse:
+    """Rotate a browser session strictly from the HttpOnly refresh cookie without exposing `refresh_token` in JSON."""
+    raw_refresh = request.cookies.get(settings.REFRESH_COOKIE_NAME)
     if not raw_refresh:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing refresh token",
+            detail="Missing refresh token cookie",
         )
-    token_resp = await AuthService(db).refresh_token(raw_refresh)
-    _set_refresh_cookie(response, token_resp.refresh_token)
-    return token_resp
+    issued = await AuthService(db).refresh_token(raw_refresh)
+    _set_refresh_cookie(response, issued.refresh_token)
+    return issued.to_browser_session()
+
+
+@router.post("/token", response_model=TokenResponse)
+async def issue_api_token_pair(
+    credentials: UserLogin,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Explicit non-browser programmatic client token endpoint. Does not read or set cookies."""
+    issued = await AuthService(db).login_user(
+        credentials.email_or_username, credentials.password
+    )
+    return issued.to_token_pair()
+
+
+@router.post("/token/refresh", response_model=TokenResponse)
+async def refresh_api_token_pair(
+    payload: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Explicit non-browser programmatic token rotation endpoint. Requires JSON `refresh_token` and ignores cookies."""
+    issued = await AuthService(db).refresh_token(payload.refresh_token)
+    return issued.to_token_pair()
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -105,6 +133,7 @@ async def logout(
     payload: Optional[LogoutRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
+    """Revoke current access token and refresh session, and clear the HttpOnly refresh cookie."""
     raw_refresh = (
         payload.refresh_token if payload and payload.refresh_token else None
     ) or request.cookies.get(settings.REFRESH_COOKIE_NAME)

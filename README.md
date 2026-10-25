@@ -144,7 +144,7 @@ npm run build
 
 | Prefix | Main Endpoints | Access |
 | :--- | :--- | :--- |
-| `/api/v1/auth` | `POST /register`, `POST /login`, `POST /login/json`, `POST /refresh`, `POST /logout` | Public / Auth |
+| `/api/v1/auth` | Browser session (`AuthSessionResponse` + `HttpOnly` refresh cookie): `POST /register`, `POST /login`, `POST /login/json`, `POST /refresh`, `POST /logout` · Headless/API clients (`TokenResponse`, JSON-only, no cookies): `POST /token`, `POST /token/refresh` | Public / Auth |
 | `/api/v1/users` | `GET /me`, `PATCH /me`, `GET /me/addresses`, `POST /me/addresses` | Authenticated |
 | `/api/v1/products` | `GET /`, `GET /{id_or_slug}`, `GET /{id}/related`, `POST /`, `PATCH /{id}`, `DELETE /{id}` | Public / Admin |
 | `/api/v1/categories` | `GET /`, `GET /{id_or_slug}`, `POST /` | Public / Admin |

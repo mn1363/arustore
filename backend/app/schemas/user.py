@@ -105,8 +105,20 @@ class LogoutRequest(BaseModel):
     refresh_token: Optional[str] = None
 
 
+class AuthSessionResponse(BaseModel):
+    """Browser session payload. Refresh token is set exclusively in an HttpOnly cookie."""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserResponse
+
+
 class TokenResponse(BaseModel):
+    """Explicit non-browser API client payload for `/auth/token` and `/auth/token/refresh`."""
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    expires_in: int
     user: UserResponse
