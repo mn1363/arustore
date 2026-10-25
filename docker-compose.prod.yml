@@ -81,6 +81,12 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - SECRET_KEY=${SECRET_KEY:-}
+      - AUTO_SEED_DEMO_DATA=false
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["localhost","127.0.0.1","backend"]}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000"]}
       - DATABASE_URL=postgresql://aruadmin:securepassword@postgres/arustore
       - REDIS_URL=redis://redis:6379
       - ELASTICSEARCH_URL=http://elasticsearch:9200
@@ -106,6 +112,9 @@ services:
   celery-worker:
     build: ./backend
     environment:
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY:-}
+      - AUTO_SEED_DEMO_DATA=false
       - DATABASE_URL=postgresql://aruadmin:securepassword@postgres/arustore
       - REDIS_URL=redis://redis:6379
       - CELERY_BROKER_URL=amqp://aruuser:securepassword@rabbitmq:5672//

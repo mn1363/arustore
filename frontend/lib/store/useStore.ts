@@ -11,7 +11,16 @@ import {
   ProductReview,
   UserProfile,
 } from '@/types'
-import { INITIAL_ORDERS, PRODUCTS } from '@/lib/data/catalog'
+import { PRODUCTS } from '@/lib/data/catalog'
+import {
+  ApiError,
+  aruApi,
+  clearInMemoryAccessToken,
+  getInMemoryAccessToken,
+  registerAuthSyncCallbacks,
+} from '@/lib/api/client'
+
+export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
 
 export interface ToastMessage {
   id: string
@@ -20,13 +29,91 @@ export interface ToastMessage {
   type: 'success' | 'info' | 'error'
 }
 
+const LEGACY_DEMO_ORDER_IDS = new Set(['ord-1001', 'ord-1002'])
+const LEGACY_DEMO_ORDER_NUMBERS = new Set(['ARU-84920', 'ARU-85104'])
+
+export function sanitizePersistedOrders(rawOrders: unknown): Order[] {
+  if (!Array.isArray(rawOrders)) {
+    return []
+  }
+  return rawOrders.filter((entry): entry is Order => {
+    if (!entry || typeof entry !== 'object') return false
+    const candidate = entry as Partial<Order>
+    if (candidate.id && LEGACY_DEMO_ORDER_IDS.has(String(candidate.id))) {
+      return false
+    }
+    if (
+      candidate.orderNumber &&
+      LEGACY_DEMO_ORDER_NUMBERS.has(String(candidate.orderNumber))
+    ) {
+      return false
+    }
+    return Boolean(candidate.id && candidate.orderNumber)
+  })
+}
+
+export interface PersistedAppSlice {
+  locale: Locale
+  hasSessionHint: boolean
+  cart: CartItemType[]
+  wishlistIds: number[]
+  orders: Order[]
+  promoCode: string | null
+  promoPercent: number
+}
+
+export function migratePersistedStoreState(
+  persistedState: unknown,
+  version: number
+): Partial<PersistedAppSlice> {
+  if (!persistedState || typeof persistedState !== 'object') {
+    return {
+      locale: 'fa',
+      hasSessionHint: false,
+      orders: [],
+    }
+  }
+
+  const raw = persistedState as Record<string, unknown>
+  const preservedLocale: Locale = raw.locale === 'en' ? 'en' : 'fa'
+  const cleanedOrders = sanitizePersistedOrders(raw.orders)
+
+  // Version < 2 may hold legacy demo admin state (`DEFAULT_USER`, `INITIAL_ORDERS`).
+  // Discard any persisted `user` / tokens / demo orders while preserving UI preferences.
+  const migrated: Partial<PersistedAppSlice> = {
+    locale: preservedLocale,
+    hasSessionHint: version >= 2 ? Boolean(raw.hasSessionHint) : false,
+    orders: cleanedOrders,
+  }
+
+  if (Array.isArray(raw.cart)) {
+    migrated.cart = raw.cart as CartItemType[]
+  }
+  if (Array.isArray(raw.wishlistIds)) {
+    migrated.wishlistIds = raw.wishlistIds.filter(
+      (id): id is number => typeof id === 'number'
+    )
+  }
+  if (typeof raw.promoCode === 'string' || raw.promoCode === null) {
+    migrated.promoCode = raw.promoCode
+  }
+  if (typeof raw.promoPercent === 'number') {
+    migrated.promoPercent = raw.promoPercent
+  }
+
+  return migrated
+}
+
 interface AppState {
   locale: Locale
   setLocale: (locale: Locale) => void
   toggleLocale: () => void
 
   products: Product[]
-  addProductReview: (productId: number, review: Omit<ProductReview, 'id' | 'created_at'>) => void
+  addProductReview: (
+    productId: number,
+    review: Omit<ProductReview, 'id' | 'created_at'>
+  ) => void
   toggleProductFeatured: (productId: number) => void
   updateProductStock: (productId: number, stock: number) => void
 
@@ -63,24 +150,27 @@ interface AppState {
   updateOrderStatus: (orderId: string, status: Order['status']) => void
 
   user: UserProfile | null
-  loginDemoUser: (asAdmin?: boolean, customName?: string, customEmail?: string) => void
-  logoutUser: () => void
+  authStatus: AuthStatus
+  hasSessionHint: boolean
+  loginUser: (emailOrUsername: string, password: string) => Promise<UserProfile>
+  registerUser: (data: {
+    email: string
+    full_name: string
+    password: string
+    phone?: string
+  }) => Promise<UserProfile>
+  logoutUser: () => Promise<void>
+  bootstrapAuth: (forceServerCheck?: boolean) => Promise<UserProfile | null>
+  verifyAdminAccess: () => Promise<
+    'authorized' | 'unauthenticated' | 'forbidden'
+  >
 
   toasts: ToastMessage[]
   pushToast: (toast: Omit<ToastMessage, 'id'>) => void
   dismissToast: (id: string) => void
 }
 
-const DEFAULT_USER: UserProfile = {
-  id: 1,
-  full_name: 'آرین رادمهر',
-  email: 'arian@arustore.io',
-  phone: '09123456789',
-  is_admin: true,
-  member_since: '2025',
-  loyalty_tier: 'Titanium VIP',
-  loyalty_points: 4850,
-}
+let inFlightBootstrap: Promise<UserProfile | null> | null = null
 
 export const useStore = create<AppState>()(
   persist(
@@ -246,7 +336,7 @@ export const useStore = create<AppState>()(
       quickViewProduct: null,
       setQuickViewProduct: (product) => set({ quickViewProduct: product }),
 
-      orders: INITIAL_ORDERS,
+      orders: [],
       placeOrder: ({ customerName, shippingAddress }) => {
         const { cart, promoPercent, orders } = get()
         const factor = (100 - promoPercent) / 100
@@ -296,17 +386,160 @@ export const useStore = create<AppState>()(
           ),
         })),
 
-      user: DEFAULT_USER,
-      loginDemoUser: (asAdmin = true, customName, customEmail) =>
+      user: null,
+      authStatus: 'idle',
+      hasSessionHint: false,
+
+      loginUser: async (emailOrUsername, password) => {
+        set({ authStatus: 'loading' })
+        try {
+          const { user } = await aruApi.auth.login(emailOrUsername, password)
+          set({
+            user,
+            authStatus: 'authenticated',
+            hasSessionHint: true,
+          })
+          return user
+        } catch (err) {
+          clearInMemoryAccessToken()
+          set({
+            user: null,
+            authStatus: 'unauthenticated',
+            hasSessionHint: false,
+          })
+          throw err
+        }
+      },
+
+      registerUser: async (data) => {
+        set({ authStatus: 'loading' })
+        try {
+          const { user } = await aruApi.auth.register(data)
+          set({
+            user,
+            authStatus: 'authenticated',
+            hasSessionHint: true,
+          })
+          return user
+        } catch (err) {
+          clearInMemoryAccessToken()
+          set({
+            user: null,
+            authStatus: 'unauthenticated',
+            hasSessionHint: false,
+          })
+          throw err
+        }
+      },
+
+      logoutUser: async () => {
+        await aruApi.auth.logout()
         set({
-          user: {
-            ...DEFAULT_USER,
-            is_admin: asAdmin,
-            full_name: customName || DEFAULT_USER.full_name,
-            email: customEmail || DEFAULT_USER.email,
-          },
-        }),
-      logoutUser: () => set({ user: null }),
+          user: null,
+          authStatus: 'unauthenticated',
+          hasSessionHint: false,
+        })
+      },
+
+      bootstrapAuth: async (forceServerCheck = false) => {
+        if (inFlightBootstrap) {
+          return inFlightBootstrap
+        }
+
+        const { user, hasSessionHint, authStatus } = get()
+        if (!forceServerCheck && user && getInMemoryAccessToken()) {
+          if (authStatus !== 'authenticated') {
+            set({ authStatus: 'authenticated' })
+          }
+          return user
+        }
+
+        if (!forceServerCheck && !hasSessionHint && !getInMemoryAccessToken()) {
+          set({ user: null, authStatus: 'unauthenticated' })
+          return null
+        }
+
+        set({ authStatus: 'loading' })
+        inFlightBootstrap = (async () => {
+          try {
+            if (getInMemoryAccessToken()) {
+              const verified = await aruApi.users.me()
+              set({
+                user: verified,
+                authStatus: 'authenticated',
+                hasSessionHint: true,
+              })
+              return verified
+            }
+
+            const refreshed = await aruApi.auth.refresh()
+            if (refreshed) {
+              set({
+                user: refreshed,
+                authStatus: 'authenticated',
+                hasSessionHint: true,
+              })
+              return refreshed
+            }
+
+            set({
+              user: null,
+              authStatus: 'unauthenticated',
+              hasSessionHint: false,
+            })
+            return null
+          } catch {
+            clearInMemoryAccessToken()
+            set({
+              user: null,
+              authStatus: 'unauthenticated',
+              hasSessionHint: false,
+            })
+            return null
+          } finally {
+            inFlightBootstrap = null
+          }
+        })()
+
+        return inFlightBootstrap
+      },
+
+      verifyAdminAccess: async () => {
+        set({ authStatus: 'loading' })
+        try {
+          if (!getInMemoryAccessToken()) {
+            const refreshed = await aruApi.auth.refresh()
+            if (!refreshed || !getInMemoryAccessToken()) {
+              set({
+                user: null,
+                authStatus: 'unauthenticated',
+                hasSessionHint: false,
+              })
+              return 'unauthenticated'
+            }
+          }
+
+          // Authoritative server-side verification: never trust cached role state.
+          const verifiedUser = await aruApi.users.me()
+          set({
+            user: verifiedUser,
+            authStatus: 'authenticated',
+            hasSessionHint: true,
+          })
+          return verifiedUser.is_admin ? 'authorized' : 'forbidden'
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 403) {
+            return 'forbidden'
+          }
+          clearInMemoryAccessToken()
+          set({
+            user: null,
+            authStatus: 'unauthenticated',
+            hasSessionHint: false,
+          })
+          return 'unauthenticated'
+        }
+      },
 
       toasts: [],
       pushToast: (toast) => {
@@ -325,15 +558,66 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'arustore-aluminum-v3',
-      partialize: (state) => ({
+      version: 2,
+      migrate: (persistedState, version) =>
+        migratePersistedStoreState(persistedState, version),
+      partialize: (state): PersistedAppSlice => ({
         locale: state.locale,
+        hasSessionHint: state.hasSessionHint,
         cart: state.cart,
         wishlistIds: state.wishlistIds,
         orders: state.orders,
-        user: state.user,
         promoCode: state.promoCode,
         promoPercent: state.promoPercent,
       }),
+      merge: (persistedState, currentState) => {
+        const raw =
+          persistedState && typeof persistedState === 'object'
+            ? (persistedState as Record<string, unknown>)
+            : {}
+        return {
+          ...currentState,
+          locale: raw.locale === 'en' ? 'en' : currentState.locale,
+          hasSessionHint: Boolean(raw.hasSessionHint),
+          cart: Array.isArray(raw.cart)
+            ? (raw.cart as CartItemType[])
+            : currentState.cart,
+          wishlistIds: Array.isArray(raw.wishlistIds)
+            ? raw.wishlistIds.filter(
+                (id): id is number => typeof id === 'number'
+              )
+            : currentState.wishlistIds,
+          orders: sanitizePersistedOrders(raw.orders),
+          promoCode:
+            typeof raw.promoCode === 'string' || raw.promoCode === null
+              ? raw.promoCode
+              : currentState.promoCode,
+          promoPercent:
+            typeof raw.promoPercent === 'number'
+              ? raw.promoPercent
+              : currentState.promoPercent,
+          // Never hydrate `user` or `is_admin` from localStorage.
+          user: null,
+          authStatus: 'idle',
+        }
+      },
     }
   )
 )
+
+registerAuthSyncCallbacks({
+  onUserUpdated: (user) => {
+    useStore.setState({
+      user,
+      authStatus: 'authenticated',
+      hasSessionHint: true,
+    })
+  },
+  onSessionCleared: () => {
+    useStore.setState({
+      user: null,
+      authStatus: 'unauthenticated',
+      hasSessionHint: false,
+    })
+  },
+})

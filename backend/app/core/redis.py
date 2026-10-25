@@ -1,12 +1,13 @@
 import json
 import time
 from typing import Any, Optional
+from fastapi import HTTPException, status
 import redis.asyncio as aioredis
 from app.core.config import settings
 
 
 class CacheManager:
-    """Async Redis cache with transparent in-memory TTL fallback for local/test environments."""
+    """Async Redis cache with dev/test in-memory fallback and fail-closed production revocation."""
 
     def __init__(self, redis_url: str) -> None:
         self._redis_url = redis_url
@@ -14,8 +15,11 @@ class CacheManager:
         self._redis_available: Optional[bool] = None
         self._memory_store: dict[str, tuple[str, Optional[float]]] = {}
 
-    async def _get_client(self) -> Optional[aioredis.Redis]:
-        if self._redis_available is False:
+    def _is_production(self) -> bool:
+        return settings.is_production
+
+    async def _get_client(self, *, retry_unavailable: bool = False) -> Optional[aioredis.Redis]:
+        if self._redis_available is False and not retry_unavailable:
             return None
         if self._client is None:
             try:
@@ -34,6 +38,24 @@ class CacheManager:
                 self._client = None
         return self._client
 
+    async def _require_redis_client(self) -> aioredis.Redis:
+        client = await self._get_client(retry_unavailable=True)
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Session revocation store is unavailable",
+            )
+        return client
+
+    async def _reset_broken_client(self) -> None:
+        self._redis_available = False
+        if self._client is not None:
+            try:
+                await self._client.close()
+            except Exception:
+                pass
+            self._client = None
+
     def _prune_expired(self) -> None:
         now = time.monotonic()
         expired = [
@@ -48,7 +70,7 @@ class CacheManager:
             try:
                 return await client.get(key)
             except Exception:
-                self._redis_available = False
+                await self._reset_broken_client()
         self._prune_expired()
         entry = self._memory_store.get(key)
         return entry[0] if entry else None
@@ -63,7 +85,7 @@ class CacheManager:
                     await client.set(key, value)
                 return
             except Exception:
-                self._redis_available = False
+                await self._reset_broken_client()
         exp = time.monotonic() + ttl_seconds if ttl_seconds else None
         self._memory_store[key] = (value, exp)
 
@@ -85,14 +107,48 @@ class CacheManager:
             try:
                 await client.delete(key)
             except Exception:
-                self._redis_available = False
+                await self._reset_broken_client()
         self._memory_store.pop(key, None)
 
+    async def _write_revocation_flag(self, key: str, ttl_seconds: int) -> None:
+        ttl = max(1, int(ttl_seconds))
+        if self._is_production():
+            client = await self._require_redis_client()
+            try:
+                await client.setex(key, ttl, "1")
+                return
+            except Exception as exc:
+                await self._reset_broken_client()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Session revocation store is unavailable",
+                ) from exc
+        await self.set(key, "1", ttl_seconds=ttl)
+
+    async def _read_revocation_flag(self, key: str) -> bool:
+        if self._is_production():
+            client = await self._require_redis_client()
+            try:
+                return (await client.get(key)) == "1"
+            except Exception as exc:
+                await self._reset_broken_client()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Session revocation store is unavailable",
+                ) from exc
+        return (await self.get(key)) == "1"
+
     async def blacklist_token(self, token_id: str, ttl_seconds: int = 3600) -> None:
-        await self.set(f"bl:{token_id}", "1", ttl_seconds=ttl_seconds)
+        await self._write_revocation_flag(f"bl:{token_id}", ttl_seconds)
 
     async def is_token_blacklisted(self, token_id: str) -> bool:
-        return (await self.get(f"bl:{token_id}")) == "1"
+        return await self._read_revocation_flag(f"bl:{token_id}")
+
+    async def revoke_session(self, session_id: str, ttl_seconds: int = 7 * 86400) -> None:
+        await self._write_revocation_flag(f"bl_sid:{session_id}", ttl_seconds)
+
+    async def is_session_revoked(self, session_id: str) -> bool:
+        return await self._read_revocation_flag(f"bl_sid:{session_id}")
 
     async def health(self) -> dict[str, str]:
         client = await self._get_client()

@@ -1,15 +1,19 @@
 from datetime import datetime, timezone
+from typing import Optional
+import uuid
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.redis import cache_manager
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
     get_password_hash,
+    remaining_token_ttl,
     verify_password,
 )
 from app.models.user import User
@@ -22,15 +26,21 @@ class AuthService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def _build_tokens(self, user: User) -> TokenResponse:
-        # Reload with addresses for serialization
+    async def _build_tokens(
+        self, user: User, session_id: Optional[str] = None
+    ) -> TokenResponse:
         stmt = (
             select(User)
             .options(selectinload(User.addresses))
             .where(User.id == user.id)
         )
         loaded_user = (await self.db.execute(stmt)).scalar_one()
-        subject = {"sub": str(loaded_user.id), "email": loaded_user.email}
+        sid = session_id or str(uuid.uuid4())
+        subject = {
+            "sub": str(loaded_user.id),
+            "email": loaded_user.email,
+            "sid": sid,
+        }
         access_token = create_access_token(subject)
         refresh_token = create_refresh_token(subject)
         return TokenResponse(
@@ -40,12 +50,16 @@ class AuthService:
         )
 
     async def register_user(self, data: UserCreate) -> TokenResponse:
-        base_username = data.username or generate_slug(data.email.split("@")[0])
+        slug_candidate = generate_slug(data.email.split("@")[0])
+        if not slug_candidate or len(slug_candidate) < 3:
+            slug_candidate = f"user-{uuid.uuid4().hex[:6]}"
+        base_username = data.username or slug_candidate
+
         existing_stmt = select(User).where(
             or_(
                 User.email == data.email.lower(),
                 User.username == base_username,
-                *( [User.phone == data.phone] if data.phone else [] ),
+                *([User.phone == data.phone] if data.phone else []),
             )
         )
         existing = (await self.db.execute(existing_stmt)).scalars().first()
@@ -60,7 +74,12 @@ class AuthService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Phone number is already registered",
                 )
-            base_username = f"{base_username}-{int(datetime.now(timezone.utc).timestamp()) % 10000}"
+            if data.username and existing.username == data.username:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Username is already taken",
+                )
+            base_username = f"{base_username}-{uuid.uuid4().hex[:4]}"
 
         user = User(
             email=data.email.lower(),
@@ -69,6 +88,7 @@ class AuthService:
             phone=data.phone,
             password_hash=get_password_hash(data.password),
             is_active=True,
+            is_admin=False,
             is_verified=True,
             last_login=datetime.now(timezone.utc),
         )
@@ -85,6 +105,11 @@ class AuthService:
 
     async def login_user(self, identifier: str, password: str) -> TokenResponse:
         ident = identifier.strip()
+        if not ident or not password:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email/username or password",
+            )
         stmt = select(User).where(
             or_(User.email == ident.lower(), User.username == ident)
         )
@@ -111,25 +136,97 @@ class AuthService:
                 detail="Invalid or expired refresh token",
             )
         jti = payload.get("jti")
-        if jti and await cache_manager.is_token_blacklisted(jti):
+        if not jti:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
+        sid = payload.get("sid")
+        if await cache_manager.is_token_blacklisted(str(jti)) or (
+            sid and await cache_manager.is_session_revoked(str(sid))
+        ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has been revoked",
             )
+
         user_id = payload.get("sub")
-        stmt = select(User).where(User.id == int(user_id), User.is_active.is_(True))
+        try:
+            parsed_user_id = int(user_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            ) from exc
+
+        stmt = select(User).where(User.id == parsed_user_id, User.is_active.is_(True))
         user = (await self.db.execute(stmt)).scalar_one_or_none()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
             )
-        if jti:
-            await cache_manager.blacklist_token(jti, ttl_seconds=7 * 86400)
-        return await self._build_tokens(user)
 
-    async def logout_user(self, access_token: str) -> None:
-        payload = decode_token(access_token)
-        jti = payload.get("jti") if payload else None
-        if jti:
-            await cache_manager.blacklist_token(jti, ttl_seconds=3600)
+        refresh_ttl = remaining_token_ttl(
+            payload, settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
+        )
+        await cache_manager.blacklist_token(str(jti), ttl_seconds=refresh_ttl)
+        return await self._build_tokens(
+            user, session_id=str(sid) if sid else None
+        )
+
+    async def logout_user(
+        self,
+        access_token: Optional[str] = None,
+        refresh_token: Optional[str] = None,
+    ) -> None:
+        if not access_token and not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+            )
+
+        revoked_any = False
+        session_ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
+
+        if access_token:
+            access_payload = decode_token(access_token)
+            if (
+                access_payload
+                and access_payload.get("type") == "access"
+                and access_payload.get("jti")
+            ):
+                access_ttl = remaining_token_ttl(
+                    access_payload, settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+                )
+                await cache_manager.blacklist_token(
+                    str(access_payload["jti"]), ttl_seconds=access_ttl
+                )
+                if access_payload.get("sid"):
+                    await cache_manager.revoke_session(
+                        str(access_payload["sid"]), ttl_seconds=session_ttl
+                    )
+                revoked_any = True
+
+        if refresh_token:
+            refresh_payload = decode_token(refresh_token)
+            if (
+                refresh_payload
+                and refresh_payload.get("type") == "refresh"
+                and refresh_payload.get("jti")
+            ):
+                refresh_ttl = remaining_token_ttl(refresh_payload, session_ttl)
+                await cache_manager.blacklist_token(
+                    str(refresh_payload["jti"]), ttl_seconds=refresh_ttl
+                )
+                if refresh_payload.get("sid"):
+                    await cache_manager.revoke_session(
+                        str(refresh_payload["sid"]), ttl_seconds=session_ttl
+                    )
+                revoked_any = True
+
+        if not revoked_any:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired authentication token",
+            )

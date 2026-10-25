@@ -6,7 +6,8 @@
     "dev": "node ./node_modules/next/dist/bin/next dev -H 0.0.0.0 -p 3000",
     "build": "node ./node_modules/next/dist/bin/next build",
     "start": "node ./node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000",
-    "lint": "node ./node_modules/next/dist/bin/next lint"
+    "lint": "node ./node_modules/next/dist/bin/next lint",
+    "test:auth": "node ./scripts/verify-auth-security.mjs"
   },
   "dependencies": {
     "@fontsource-variable/estedad": "^5.3.0",

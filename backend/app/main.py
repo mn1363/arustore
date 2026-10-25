@@ -18,68 +18,11 @@ from app.api.v1.endpoints import (
     users,
     wishlist,
 )
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.elasticsearch import es_client
 from app.core.redis import cache_manager
 from app.services.seed_service import seed_initial_catalog
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    if settings.AUTO_SEED_DEMO_DATA:
-        async with AsyncSessionLocal() as session:
-            await seed_initial_catalog(session)
-
-    yield
-
-    await cache_manager.close()
-    await es_client.close()
-    await engine.dispose()
-
-
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    description="REST API for AruStore cast & anodized aluminum servingware e-commerce platform.",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"https://.*\.e2b\.app",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
-
-app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
-app.include_router(users.router, prefix=f"{settings.API_V1_STR}/users", tags=["users"])
-app.include_router(
-    categories.router, prefix=f"{settings.API_V1_STR}/categories", tags=["categories"]
-)
-app.include_router(brands.router, prefix=f"{settings.API_V1_STR}/brands", tags=["brands"])
-app.include_router(
-    products.router, prefix=f"{settings.API_V1_STR}/products", tags=["products"]
-)
-app.include_router(cart.router, prefix=f"{settings.API_V1_STR}/cart", tags=["cart"])
-app.include_router(orders.router, prefix=f"{settings.API_V1_STR}/orders", tags=["orders"])
-app.include_router(
-    reviews.router, prefix=f"{settings.API_V1_STR}/reviews", tags=["reviews"]
-)
-app.include_router(
-    wishlist.router, prefix=f"{settings.API_V1_STR}/wishlist", tags=["wishlist"]
-)
-app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
-app.include_router(
-    analytics.router, prefix=f"{settings.API_V1_STR}/analytics", tags=["analytics"]
-)
 
 
 API_LANDING_HTML = """<!DOCTYPE html>
@@ -166,7 +109,7 @@ API_LANDING_HTML = """<!DOCTYPE html>
         <button class="ep-btn" onclick="runGet('/api/v1/categories/')"><span class="method">GET</span>/api/v1/categories/</button>
         <button class="ep-btn" onclick="runGet('/api/v1/brands/')"><span class="method">GET</span>/api/v1/brands/</button>
         <button class="ep-btn" onclick="runGet('/api/v1/reviews/product/1')"><span class="method">GET</span>/api/v1/reviews/product/1</button>
-        <button class="ep-btn" onclick="runAdminDemo()"><span class="method">AUTH</span>/api/v1/admin/dashboard</button>
+        <button class="ep-btn" onclick="runGet('/api/v1/admin/dashboard')"><span class="method">AUTH</span>/api/v1/admin/dashboard</button>
       </div>
     </div>
 
@@ -192,29 +135,6 @@ API_LANDING_HTML = """<!DOCTYPE html>
       }
     }
 
-    async function runAdminDemo() {
-      const box = document.getElementById('res-box');
-      const title = document.getElementById('res-title');
-      title.textContent = 'ورود ادمین آزمایشی و دریافت /api/v1/admin/dashboard ...';
-      box.textContent = 'Authenticating admin@arustore.ir ...';
-      try {
-        const loginRes = await fetch('/api/v1/auth/login/json', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email_or_username: 'admin@arustore.ir', password: 'Admin1234!' })
-        });
-        const loginData = await loginRes.json();
-        const dashRes = await fetch('/api/v1/admin/dashboard', {
-          headers: { 'Authorization': 'Bearer ' + loginData.access_token }
-        });
-        const dashData = await dashRes.json();
-        title.textContent = 'پاسخ (' + dashRes.status + '): GET /api/v1/admin/dashboard';
-        box.textContent = JSON.stringify(dashData, null, 2);
-      } catch (err) {
-        box.textContent = String(err);
-      }
-    }
-
     runGet('/api/v1/products/?page=1&page_size=3');
   </script>
 </body>
@@ -222,31 +142,131 @@ API_LANDING_HTML = """<!DOCTYPE html>
 """
 
 
-@app.get("/", include_in_schema=False)
-async def root_landing(request: Request):
-    accept = request.headers.get("accept", "")
-    if "text/html" in accept:
-        return HTMLResponse(content=API_LANDING_HTML, status_code=200)
-    return JSONResponse(
-        content={
-            "service": settings.PROJECT_NAME,
-            "version": settings.VERSION,
-            "status": "healthy",
-            "docs": "/docs",
-            "redoc": "/redoc",
-            "openapi": "/openapi.json",
-            "api_v1": settings.API_V1_STR,
-        }
+def create_application(app_settings: Settings = settings) -> FastAPI:
+    app_settings.validate_production_security()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        app_settings.validate_production_security()
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        if app_settings.AUTO_SEED_DEMO_DATA and not app_settings.is_production:
+            async with AsyncSessionLocal() as session:
+                await seed_initial_catalog(session)
+
+        yield
+
+        await cache_manager.close()
+        await es_client.close()
+        await engine.dispose()
+
+    application = FastAPI(
+        title=app_settings.PROJECT_NAME,
+        version=app_settings.VERSION,
+        description="REST API for AruStore cast & anodized aluminum servingware e-commerce platform.",
+        lifespan=lifespan,
     )
 
+    cors_origin_regex = (
+        app_settings.CORS_ORIGIN_REGEX
+        if app_settings.is_production
+        else (app_settings.CORS_ORIGIN_REGEX or r"https://.*\.e2b\.app")
+    )
 
-@app.get("/health", tags=["system"])
-@app.get(f"{settings.API_V1_STR}/health", tags=["system"])
-async def health_check():
-    cache_status = await cache_manager.health()
-    return {
-        "status": "healthy",
-        "service": settings.PROJECT_NAME,
-        "version": settings.VERSION,
-        "cache": cache_status,
-    }
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=app_settings.CORS_ORIGINS,
+        allow_origin_regex=cors_origin_regex,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    effective_allowed_hosts = (
+        app_settings.ALLOWED_HOSTS
+        if app_settings.is_production
+        else list(dict.fromkeys([*app_settings.ALLOWED_HOSTS, "*.e2b.app"]))
+    )
+    application.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=effective_allowed_hosts,
+    )
+
+    application.include_router(
+        auth.router, prefix=f"{app_settings.API_V1_STR}/auth", tags=["auth"]
+    )
+    application.include_router(
+        users.router, prefix=f"{app_settings.API_V1_STR}/users", tags=["users"]
+    )
+    application.include_router(
+        categories.router,
+        prefix=f"{app_settings.API_V1_STR}/categories",
+        tags=["categories"],
+    )
+    application.include_router(
+        brands.router, prefix=f"{app_settings.API_V1_STR}/brands", tags=["brands"]
+    )
+    application.include_router(
+        products.router,
+        prefix=f"{app_settings.API_V1_STR}/products",
+        tags=["products"],
+    )
+    application.include_router(
+        cart.router, prefix=f"{app_settings.API_V1_STR}/cart", tags=["cart"]
+    )
+    application.include_router(
+        orders.router, prefix=f"{app_settings.API_V1_STR}/orders", tags=["orders"]
+    )
+    application.include_router(
+        reviews.router,
+        prefix=f"{app_settings.API_V1_STR}/reviews",
+        tags=["reviews"],
+    )
+    application.include_router(
+        wishlist.router,
+        prefix=f"{app_settings.API_V1_STR}/wishlist",
+        tags=["wishlist"],
+    )
+    application.include_router(
+        admin.router, prefix=f"{app_settings.API_V1_STR}/admin", tags=["admin"]
+    )
+    application.include_router(
+        analytics.router,
+        prefix=f"{app_settings.API_V1_STR}/analytics",
+        tags=["analytics"],
+    )
+
+    @application.get("/", include_in_schema=False)
+    async def root_landing(request: Request):
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            return HTMLResponse(content=API_LANDING_HTML, status_code=200)
+        return JSONResponse(
+            content={
+                "service": app_settings.PROJECT_NAME,
+                "version": app_settings.VERSION,
+                "status": "healthy",
+                "docs": "/docs",
+                "redoc": "/redoc",
+                "openapi": "/openapi.json",
+                "api_v1": app_settings.API_V1_STR,
+            }
+        )
+
+    @application.get("/health", tags=["system"])
+    @application.get(f"{app_settings.API_V1_STR}/health", tags=["system"])
+    async def health_check():
+        cache_status = await cache_manager.health()
+        return {
+            "status": "healthy",
+            "service": app_settings.PROJECT_NAME,
+            "version": app_settings.VERSION,
+            "cache": cache_status,
+        }
+
+    return application
+
+
+app = create_application(settings)

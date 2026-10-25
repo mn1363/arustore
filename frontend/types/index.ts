@@ -137,11 +137,13 @@ export interface Order {
 
 export interface UserProfile {
   id: number
+  username?: string
   full_name: string
   email: string
-  phone: string
-  avatar?: string
+  phone?: string | null
+  avatar?: string | null
   is_admin: boolean
+  is_verified?: boolean
   member_since: string
   loyalty_tier: string
   loyalty_points: number

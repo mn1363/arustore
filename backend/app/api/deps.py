@@ -20,18 +20,23 @@ async def get_optional_user(
     if not token:
         return None
     payload = decode_token(token)
-    if not payload or payload.get("type") not in (None, "access"):
+    if not payload or payload.get("type") != "access":
         return None
     jti = payload.get("jti")
-    if jti and await cache_manager.is_token_blacklisted(jti):
+    if not jti or await cache_manager.is_token_blacklisted(str(jti)):
+        return None
+    sid = payload.get("sid")
+    if sid and await cache_manager.is_session_revoked(str(sid)):
         return None
     user_id = payload.get("sub")
-    if not user_id:
+    try:
+        parsed_user_id = int(user_id)
+    except (TypeError, ValueError):
         return None
     stmt = (
         select(User)
         .options(selectinload(User.addresses))
-        .where(User.id == int(user_id), User.is_active.is_(True))
+        .where(User.id == parsed_user_id, User.is_active.is_(True))
     )
     return (await db.execute(stmt)).scalar_one_or_none()
 

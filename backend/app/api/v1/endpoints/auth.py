@@ -1,12 +1,14 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import oauth2_scheme
+from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.common import MessageResponse
 from app.schemas.user import (
+    LogoutRequest,
     RefreshTokenRequest,
     TokenResponse,
     UserCreate,
@@ -15,46 +17,100 @@ from app.schemas.user import (
 from app.services.auth_service import AuthService
 
 router = APIRouter()
+REFRESH_COOKIE_PATH = "/api/v1/auth"
+
+
+def _set_refresh_cookie(response: Response, refresh_token_value: str) -> None:
+    response.set_cookie(
+        key=settings.REFRESH_COOKIE_NAME,
+        value=refresh_token_value,
+        httponly=True,
+        secure=bool(settings.REFRESH_COOKIE_SECURE),
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path=REFRESH_COOKIE_PATH,
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=settings.REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        httponly=True,
+        secure=bool(settings.REFRESH_COOKIE_SECURE),
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+    )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-    user_data: UserCreate, db: AsyncSession = Depends(get_db)
+    user_data: UserCreate,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    return await AuthService(db).register_user(user_data)
+    token_resp = await AuthService(db).register_user(user_data)
+    _set_refresh_cookie(response, token_resp.refresh_token)
+    return token_resp
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login_form(
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    return await AuthService(db).login_user(form_data.username, form_data.password)
+    token_resp = await AuthService(db).login_user(form_data.username, form_data.password)
+    _set_refresh_cookie(response, token_resp.refresh_token)
+    return token_resp
 
 
 @router.post("/login/json", response_model=TokenResponse)
 async def login_json(
     credentials: UserLogin,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    return await AuthService(db).login_user(
+    token_resp = await AuthService(db).login_user(
         credentials.email_or_username, credentials.password
     )
+    _set_refresh_cookie(response, token_resp.refresh_token)
+    return token_resp
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    payload: RefreshTokenRequest,
+    request: Request,
+    response: Response,
+    payload: Optional[RefreshTokenRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    return await AuthService(db).refresh_token(payload.refresh_token)
+    raw_refresh = (
+        payload.refresh_token if payload and payload.refresh_token else None
+    ) or request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if not raw_refresh:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing refresh token",
+        )
+    token_resp = await AuthService(db).refresh_token(raw_refresh)
+    _set_refresh_cookie(response, token_resp.refresh_token)
+    return token_resp
 
 
 @router.post("/logout", response_model=MessageResponse)
 async def logout(
+    request: Request,
+    response: Response,
     token: Optional[str] = Depends(oauth2_scheme),
+    payload: Optional[LogoutRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    if token:
-        await AuthService(db).logout_user(token)
+    raw_refresh = (
+        payload.refresh_token if payload and payload.refresh_token else None
+    ) or request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    await AuthService(db).logout_user(
+        access_token=token,
+        refresh_token=raw_refresh,
+    )
+    _clear_refresh_cookie(response)
     return MessageResponse(message="Logged out successfully")

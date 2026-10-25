@@ -1,4 +1,4 @@
-import { Brand, Category, Order, Product } from '@/types'
+import { Brand, Category, Product } from '@/types'
 
 export const BRANDS: Brand[] = [
   {
@@ -562,65 +562,5 @@ export const PRODUCTS: Product[] = [
       'ارائه به همراه شناسنامه اصالت ساخت کارخانه آرو استور',
     ],
     reviews: [],
-  },
-]
-
-export const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'ord-1001',
-    orderNumber: 'ARU-84920',
-    createdAt: '2026-10-19',
-    status: 'delivered',
-    total: 89,
-    total_toman: 4850000,
-    shippingAddress: 'تهران، زعفرانیه، خیابان مقدس اردبیلی، پلاک ۴۲، واحد ۸',
-    customerName: 'مهتاب رضایی',
-    items: [
-      {
-        productId: 1,
-        name: 'Royal 3-Tier Aluminum Pastry Stand',
-        name_fa: 'شیرینی‌خوری سه‌طبقه آلومینیومی مدل رویال',
-        image: '/images/products/tiered-stand.png',
-        quantity: 1,
-        price: 89,
-        price_toman: 4850000,
-        colorName: 'Brushed Silver & Champagne Finial',
-        colorName_fa: 'سیلور ساتن با تاج طلایی شامپاینی',
-      },
-    ],
-  },
-  {
-    id: 'ord-1002',
-    orderNumber: 'ARU-85104',
-    createdAt: '2026-10-23',
-    status: 'shipped',
-    total: 180,
-    total_toman: 9830000,
-    shippingAddress: 'اصفهان، خیابان چهارباغ بالا، مجتمع پارسیان، واحد ۱۲',
-    customerName: 'سارا محمدی',
-    items: [
-      {
-        productId: 6,
-        name: 'Isfahan Modern Cast Aluminum Tea & Sugar Set',
-        name_fa: 'سرویس چای‌خوری و قندان آلومینیومی مدل نقش‌جهان',
-        image: '/images/products/tea-set.png',
-        quantity: 1,
-        price: 118,
-        price_toman: 6450000,
-        colorName: 'Brushed Silver & Gold Finial',
-        colorName_fa: 'سیلور قلم‌زنی با قپه طلایی',
-      },
-      {
-        productId: 4,
-        name: 'Zarrin Hammered Aluminum Nut & Candy Dish',
-        name_fa: 'آجیل‌خوری و شکلات‌خوری درب‌دار چکش‌کاری زرین',
-        image: '/images/products/nut-dish.png',
-        quantity: 1,
-        price: 62,
-        price_toman: 3380000,
-        colorName: 'Hammered Silver & Gold Leaf',
-        colorName_fa: 'نقره‌ای چکش‌کاری با قپه برگ طلایی',
-      },
-    ],
   },
 ]

@@ -55,9 +55,19 @@ def create_refresh_token(
 
 
 def decode_token(token: str) -> dict[str, Any]:
+    if not token or not isinstance(token, str):
+        return {}
     try:
         return jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
     except JWTError:
         return {}
+
+
+def remaining_token_ttl(payload: dict[str, Any], default_seconds: int) -> int:
+    exp = payload.get("exp")
+    if isinstance(exp, (int, float)):
+        now_ts = datetime.now(timezone.utc).timestamp()
+        return max(1, int(exp - now_ts))
+    return max(1, int(default_seconds))
