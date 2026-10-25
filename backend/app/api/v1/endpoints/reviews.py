@@ -82,6 +82,7 @@ async def create_review(
         .where(
             Order.user_id == current_user.id,
             OrderItem.product_id == payload.product_id,
+            Order.payment_status == "paid",
             Order.status != "cancelled",
         )
         .limit(1)

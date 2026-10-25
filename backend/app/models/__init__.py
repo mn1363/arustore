@@ -10,6 +10,11 @@ from app.models.order import (
     OrderItem,
     OrderStatusHistory,
 )
+from app.models.payment import (
+    DiscountReservation,
+    InventoryReservation,
+    PaymentAttempt,
+)
 from app.models.product import Product, ProductImage, ProductVariant, product_category
 from app.models.review import Review
 from app.models.user import Address, User
@@ -32,6 +37,9 @@ __all__ = [
     "OrderIdempotencyRecord",
     "OrderItem",
     "OrderStatusHistory",
+    "PaymentAttempt",
+    "InventoryReservation",
+    "DiscountReservation",
     "AnalyticsEvent",
     "Review",
     "WishlistItem",

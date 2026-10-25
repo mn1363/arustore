@@ -39,10 +39,21 @@ class AnalyticsService:
                 select(
                     func.coalesce(func.sum(Order.total), 0.0),
                     func.coalesce(func.sum(Order.total_toman), 0),
-                    func.count(Order.id),
-                ).where(Order.status != "cancelled")
+                ).where(
+                    Order.payment_status == "paid",
+                    Order.status != "cancelled",
+                )
             )
         ).one()
+
+        non_cancelled_orders = int(
+            (
+                await self.db.execute(
+                    select(func.count(Order.id)).where(Order.status != "cancelled")
+                )
+            ).scalar_one()
+            or 0
+        )
 
         total_products = int(
             (
@@ -98,7 +109,7 @@ class AnalyticsService:
         return AnalyticsOverviewResponse(
             total_revenue=round(float(rev_row[0]), 2),
             total_revenue_toman=int(rev_row[1]),
-            total_orders=int(rev_row[2]),
+            total_orders=non_cancelled_orders,
             total_products=total_products,
             total_users=total_users,
             in_stock_products=in_stock_products,

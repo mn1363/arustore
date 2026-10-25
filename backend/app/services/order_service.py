@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -22,6 +22,7 @@ from app.models.product import Product
 from app.models.user import User
 from app.schemas.order import OrderCreate, OrderResponse, OrderStatusUpdate
 from app.services.cart_service import CartService
+from app.services.payment_lifecycle_service import PaymentLifecycleService
 
 
 def _compute_payload_hash(payload: OrderCreate) -> str:
@@ -404,61 +405,115 @@ class OrderService:
     async def update_order_status(
         self, order_id: int, payload: OrderStatusUpdate
     ) -> OrderResponse:
-        loaded = (
-            await self.db.execute(self._order_query().where(Order.id == order_id))
-        ).scalar_one_or_none()
-        if not loaded:
-            raise HTTPException(status_code=404, detail="Order not found")
-
-        current_status = loaded.status
-        payment_status = loaded.payment_status
         target_status = payload.status
-
-        if payment_status != "paid":
-            if target_status not in {"pending_payment", "cancelled"}:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        f"Cannot transition order status from '{current_status}' to '{target_status}' "
-                        f"while payment_status is '{payment_status}'. Unpaid orders may only be 'pending_payment' or 'cancelled'."
-                    ),
-                )
-            if current_status == "cancelled" and target_status != "cancelled":
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Cancelled orders cannot transition back to 'pending_payment'.",
-                )
-        else:
-            if target_status == "pending_payment":
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Paid orders cannot transition back to 'pending_payment'.",
-                )
-            allowed_targets = PAID_ALLOWED_NEXT_STATUSES.get(
-                current_status, set()
-            )
-            if target_status not in allowed_targets:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        f"Cannot transition paid order from '{current_status}' to '{target_status}'."
-                    ),
-                )
-
         cleaned_note = (payload.note or "").strip()
-        if target_status == current_status and not cleaned_note:
-            return OrderResponse.model_validate(loaded)
+        is_sqlite = self.db.get_bind().dialect.name == "sqlite"
 
-        loaded.status = target_status
-        loaded.status_history.append(
-            OrderStatusHistory(
-                status=target_status,
-                note=cleaned_note
-                or f"Status updated from {current_status} to {target_status}",
-            )
+        max_attempts = 6
+        for attempt_idx in range(max_attempts):
+            try:
+                if self.db.in_transaction():
+                    await self.db.rollback()
+                if is_sqlite:
+                    await self.db.execute(
+                        text("DELETE FROM payment_attempts WHERE id = -1")
+                    )
+
+                order_stmt = self._order_query().where(Order.id == order_id)
+                if not is_sqlite:
+                    order_stmt = order_stmt.with_for_update()
+
+                loaded = (await self.db.execute(order_stmt)).scalar_one_or_none()
+                if not loaded:
+                    await self.db.rollback()
+                    raise HTTPException(status_code=404, detail="Order not found")
+
+                current_status = loaded.status
+                payment_status = loaded.payment_status
+
+                if payment_status != "paid":
+                    if target_status not in {"pending_payment", "cancelled"}:
+                        await self.db.rollback()
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=(
+                                f"Cannot transition order status from '{current_status}' to '{target_status}' "
+                                f"while payment_status is '{payment_status}'. Unpaid orders may only be 'pending_payment' or 'cancelled'."
+                            ),
+                        )
+                    if current_status == "cancelled" and target_status != "cancelled":
+                        await self.db.rollback()
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Cancelled orders cannot transition back to 'pending_payment'.",
+                        )
+                else:
+                    if target_status == "pending_payment":
+                        await self.db.rollback()
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Paid orders cannot transition back to 'pending_payment'.",
+                        )
+                    allowed_targets = PAID_ALLOWED_NEXT_STATUSES.get(
+                        current_status, set()
+                    )
+                    if target_status not in allowed_targets:
+                        await self.db.rollback()
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=(
+                                f"Cannot transition paid order from '{current_status}' to '{target_status}'."
+                            ),
+                        )
+
+                if target_status == current_status and not cleaned_note:
+                    await self.db.rollback()
+                    return OrderResponse.model_validate(loaded)
+
+                if (
+                    payment_status != "paid"
+                    and target_status == "cancelled"
+                    and current_status != "cancelled"
+                ):
+                    await PaymentLifecycleService(
+                        self.db
+                    ).release_active_attempt_in_order_cancel_tx(
+                        order_id=loaded.id,
+                        promo_code=loaded.promo_code,
+                    )
+
+                loaded.status = target_status
+                loaded.status_history.append(
+                    OrderStatusHistory(
+                        status=target_status,
+                        note=cleaned_note
+                        or f"Status updated from {current_status} to {target_status}",
+                    )
+                )
+                await self.db.commit()
+                refreshed = (
+                    await self.db.execute(
+                        self._order_query().where(Order.id == order_id)
+                    )
+                ).scalar_one()
+                return OrderResponse.model_validate(refreshed)
+
+            except HTTPException:
+                raise
+            except OperationalError as op_err:
+                await self.db.rollback()
+                if (
+                    "database is locked" in str(op_err).lower()
+                    and attempt_idx < max_attempts - 1
+                ):
+                    await asyncio.sleep(0.025 * (attempt_idx + 1))
+                    continue
+                raise
+            except Exception:
+                await self.db.rollback()
+                raise
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Order status update temporarily busy; please retry",
         )
-        await self.db.commit()
-        refreshed = (
-            await self.db.execute(self._order_query().where(Order.id == order_id))
-        ).scalar_one()
-        return OrderResponse.model_validate(refreshed)

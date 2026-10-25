@@ -193,6 +193,108 @@ CREATE TABLE IF NOT EXISTS order_status_history (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS order_idempotency_records (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    idempotency_key VARCHAR(128) NOT NULL,
+    payload_hash VARCHAR(64) NOT NULL,
+    cart_hash VARCHAR(64) NOT NULL,
+    order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_order_idempotency_user_key UNIQUE (user_id, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS payment_attempts (
+    id SERIAL PRIMARY KEY,
+    attempt_number VARCHAR(48) NOT NULL,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE RESTRICT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    idempotency_key VARCHAR(128) NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    amount_toman INTEGER NOT NULL,
+    currency_unit VARCHAR(16) NOT NULL DEFAULT 'toman',
+    active_order_key INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+    settled_order_key INTEGER REFERENCES orders(id) ON DELETE RESTRICT,
+    provider_authority VARCHAR(128),
+    provider_transaction_id VARCHAR(128),
+    sandbox_nonce VARCHAR(64),
+    failure_code VARCHAR(64),
+    failure_reason VARCHAR(255),
+    expires_at TIMESTAMPTZ NOT NULL,
+    verified_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_payment_attempts_attempt_number UNIQUE (attempt_number),
+    CONSTRAINT uq_payment_attempts_user_idempotency UNIQUE (user_id, idempotency_key),
+    CONSTRAINT uq_payment_attempts_active_order_key UNIQUE (active_order_key),
+    CONSTRAINT uq_payment_attempts_settled_order_key UNIQUE (settled_order_key),
+    CONSTRAINT uq_payment_attempts_provider_txn UNIQUE (provider, provider_transaction_id),
+    CONSTRAINT ck_payment_attempts_amount_nonneg CHECK (amount_toman >= 0),
+    CONSTRAINT ck_payment_attempts_currency_unit CHECK (currency_unit = 'toman'),
+    CONSTRAINT ck_payment_attempts_status_valid CHECK (
+        status IN (
+            'initiated',
+            'pending',
+            'succeeded',
+            'failed',
+            'expired',
+            'cancelled',
+            'reconciliation_required'
+        )
+    ),
+    CONSTRAINT ck_payment_attempts_key_consistency CHECK (
+        (status IN ('initiated', 'pending') AND active_order_key = order_id AND settled_order_key IS NULL)
+        OR (status = 'succeeded' AND active_order_key IS NULL AND settled_order_key = order_id)
+        OR (status IN ('failed', 'expired', 'cancelled', 'reconciliation_required') AND active_order_key IS NULL AND settled_order_key IS NULL)
+    )
+);
+
+CREATE TABLE IF NOT EXISTS inventory_reservations (
+    id SERIAL PRIMARY KEY,
+    payment_attempt_id INTEGER NOT NULL REFERENCES payment_attempts(id) ON DELETE CASCADE,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'active',
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    released_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_inventory_reservations_attempt_product UNIQUE (payment_attempt_id, product_id),
+    CONSTRAINT ck_inventory_reservations_qty_positive CHECK (quantity >= 1),
+    CONSTRAINT ck_inventory_reservations_status CHECK (
+        status IN ('active', 'consumed', 'released', 'expired')
+    )
+);
+
+CREATE TABLE IF NOT EXISTS discount_reservations (
+    id SERIAL PRIMARY KEY,
+    payment_attempt_id INTEGER NOT NULL REFERENCES payment_attempts(id) ON DELETE CASCADE,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    discount_id INTEGER NOT NULL REFERENCES discounts(id) ON DELETE RESTRICT,
+    status VARCHAR(24) NOT NULL DEFAULT 'active',
+    active_order_key INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+    settled_order_key INTEGER REFERENCES orders(id) ON DELETE RESTRICT,
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    released_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_discount_reservations_attempt UNIQUE (payment_attempt_id),
+    CONSTRAINT uq_discount_reservations_attempt_discount UNIQUE (payment_attempt_id, discount_id),
+    CONSTRAINT uq_discount_reservations_active_order UNIQUE (active_order_key),
+    CONSTRAINT uq_discount_reservations_settled_order UNIQUE (settled_order_key),
+    CONSTRAINT ck_discount_reservations_status CHECK (
+        status IN ('active', 'consumed', 'released', 'expired')
+    ),
+    CONSTRAINT ck_discount_reservations_keys CHECK (
+        (status = 'active' AND active_order_key = order_id AND settled_order_key IS NULL)
+        OR (status = 'consumed' AND active_order_key IS NULL AND settled_order_key = order_id)
+        OR (status IN ('released', 'expired') AND active_order_key IS NULL AND settled_order_key IS NULL)
+    )
+);
+
 CREATE TABLE IF NOT EXISTS discount_usages (
     id SERIAL PRIMARY KEY,
     discount_id INTEGER NOT NULL REFERENCES discounts(id) ON DELETE CASCADE,
@@ -241,5 +343,17 @@ CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
 CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_order_idempotency_user ON order_idempotency_records(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_attempts_order ON payment_attempts(order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_attempts_user ON payment_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_attempts_status ON payment_attempts(status);
+CREATE INDEX IF NOT EXISTS idx_payment_attempts_expires ON payment_attempts(expires_at);
+CREATE INDEX IF NOT EXISTS idx_payment_attempts_order_created ON payment_attempts(order_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_inventory_reservations_attempt ON inventory_reservations(payment_attempt_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_reservations_order ON inventory_reservations(order_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_reservations_product_active ON inventory_reservations(product_id, status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_discount_reservations_attempt ON discount_reservations(payment_attempt_id);
+CREATE INDEX IF NOT EXISTS idx_discount_reservations_order ON discount_reservations(order_id);
+CREATE INDEX IF NOT EXISTS idx_discount_reservations_discount_active ON discount_reservations(discount_id, status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_cart_user ON cart_items(user_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id);

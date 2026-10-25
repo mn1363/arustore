@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "cache+memory://"
     CELERY_TASK_ALWAYS_EAGER: bool = True
 
+    PAYMENT_PROVIDER: Literal["disabled", "sandbox"] = "disabled"
+    PAYMENT_SANDBOX_ENABLED: bool = False
+    PAYMENT_RESERVATION_TTL_SECONDS: int = Field(default=900, ge=60, le=3600)
     PAYMENT_GATEWAY_KEY: str = "sandbox_key"
     PAYMENT_GATEWAY_SECRET: str = Field(default="sandbox_secret", repr=False)
 
@@ -78,9 +81,31 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return (self.ENVIRONMENT or "").strip().lower() == "production"
 
+    @property
+    def is_sandbox_payment_active(self) -> bool:
+        return (
+            not self.is_production
+            and self.PAYMENT_PROVIDER == "sandbox"
+            and self.PAYMENT_SANDBOX_ENABLED is True
+        )
+
+    @property
+    def is_payment_enabled(self) -> bool:
+        if self.PAYMENT_PROVIDER == "disabled":
+            return False
+        if self.PAYMENT_PROVIDER == "sandbox":
+            return self.is_sandbox_payment_active
+        return False
+
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
         if self.is_production:
+            if self.PAYMENT_PROVIDER == "sandbox" or self.PAYMENT_SANDBOX_ENABLED is True:
+                raise ValueError(
+                    "Invalid production configuration: sandbox payment provider or "
+                    "PAYMENT_SANDBOX_ENABLED cannot be enabled when ENVIRONMENT=production."
+                )
+
             raw_secret = (self.SECRET_KEY or "").strip()
             if (
                 not raw_secret

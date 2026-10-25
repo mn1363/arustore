@@ -171,7 +171,7 @@ async def test_cart_promo_order_verified_review_and_wishlist_flow(
     cart_after = await client.get("/api/v1/cart/", headers=headers)
     assert cart_after.json()["item_count"] == 0
 
-    # Verified purchase review on product 2
+    # Unpaid pending-payment order does NOT grant verified-purchase badge prior to payment
     rev_res = await client.post(
         "/api/v1/reviews/",
         headers=headers,
@@ -183,7 +183,7 @@ async def test_cart_promo_order_verified_review_and_wishlist_flow(
         },
     )
     assert rev_res.status_code == 201
-    assert rev_res.json()["is_verified_purchase"] is True
+    assert rev_res.json()["is_verified_purchase"] is False
 
 
 async def test_admin_and_analytics_endpoints(client: AsyncClient) -> None:

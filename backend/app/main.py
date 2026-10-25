@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     cart,
     categories,
     orders,
+    payments,
     products,
     reviews,
     users,
@@ -22,6 +23,7 @@ from app.core.config import Settings, settings
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.elasticsearch import es_client
 from app.core.redis import cache_manager
+from app.services.payment_lifecycle_service import PaymentContractError
 from app.services.seed_service import seed_initial_catalog
 
 
@@ -168,6 +170,19 @@ def create_application(app_settings: Settings = settings) -> FastAPI:
         description="REST API for AruStore cast & anodized aluminum servingware e-commerce platform.",
         lifespan=lifespan,
     )
+    application.state.settings = app_settings
+
+    @application.exception_handler(PaymentContractError)
+    async def handle_payment_contract_error(
+        _request: Request, exc: PaymentContractError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "code": exc.code,
+                "detail": f"{exc.code}: {exc.message}",
+            },
+        )
 
     cors_origin_regex = (
         app_settings.CORS_ORIGIN_REGEX
@@ -219,6 +234,17 @@ def create_application(app_settings: Settings = settings) -> FastAPI:
     application.include_router(
         orders.router, prefix=f"{app_settings.API_V1_STR}/orders", tags=["orders"]
     )
+    application.include_router(
+        payments.router,
+        prefix=f"{app_settings.API_V1_STR}/orders",
+        tags=["payments"],
+    )
+    if app_settings.is_sandbox_payment_active:
+        application.include_router(
+            payments.sandbox_router,
+            prefix=f"{app_settings.API_V1_STR}/orders",
+            tags=["payments-sandbox"],
+        )
     application.include_router(
         reviews.router,
         prefix=f"{app_settings.API_V1_STR}/reviews",
