@@ -198,6 +198,35 @@ export default function Header() {
               </Link>
             )
           })}
+          <div className="pt-2 mt-2 border-t border-white/[0.07] grid grid-cols-2 gap-2 sm:hidden">
+            <Link
+              href="/wishlist"
+              onClick={() => setMobileOpen(false)}
+              className="py-2.5 px-3 rounded-xl secondary-3d-btn text-xs font-medium flex items-center justify-center gap-1.5"
+            >
+              <Heart className="w-3.5 h-3.5 text-[#dfc08e]" />
+              <span>{dict.nav.wishlist}</span>
+              {wishlistIds.length > 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#dfc08e]" />
+              )}
+            </Link>
+            <Link
+              href={user ? '/profile' : '/login'}
+              onClick={() => setMobileOpen(false)}
+              className="py-2.5 px-3 rounded-xl secondary-3d-btn text-xs font-medium flex items-center justify-center gap-1.5"
+            >
+              <User className="w-3.5 h-3.5 text-[#dfc08e]" />
+              <span>
+                {user
+                  ? locale === 'fa'
+                    ? 'حساب کاربری'
+                    : 'Profile'
+                  : locale === 'fa'
+                  ? 'ورود / عضویت'
+                  : 'Sign In'}
+              </span>
+            </Link>
+          </div>
         </div>
       )}
     </header>

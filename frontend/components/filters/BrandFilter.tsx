@@ -26,10 +26,10 @@ export default function BrandFilter({ selectedBrands, onToggleBrand }: BrandFilt
               key={brand.id}
               type="button"
               onClick={() => onToggleBrand(brand.slug)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors border ${
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all border ${
                 checked
-                  ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0] font-semibold'
-                  : 'bg-transparent border-transparent text-[#9ca0ab] hover:bg-white/[0.04] hover:text-[#e4e6eb]'
+                  ? 'bg-[#1b2030] border-[#dfc08e]/60 text-[#f4f4f6] font-semibold'
+                  : 'bg-transparent border-transparent text-[#979fb2] hover:bg-white/[0.04] hover:text-[#e8ebf2]'
               }`}
             >
               <span>{locale === 'fa' ? brand.name_fa : brand.name}</span>

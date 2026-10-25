@@ -65,14 +65,14 @@ export default function HeroStage3D() {
       </svg>
 
       {/* Interactive 3D Sanctuary Stage */}
-      <div className="relative h-[350px] sm:h-[420px] w-full cursor-grab active:cursor-grabbing select-none">
+      <div className="relative h-[300px] sm:h-[420px] w-full cursor-grab active:cursor-grabbing select-none">
         <StudioScene3D
           archetype={activeProduct.archetype}
           bodyColor={currentColor.hex}
           accentColor={currentColor.accentHex}
           exploded={exploded}
           wireframe={false}
-          allowZoom={true}
+          allowZoom={false}
           fallbackImage={activeProduct.images[0]?.url}
         />
 

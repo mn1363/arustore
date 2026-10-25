@@ -4,7 +4,7 @@ import React from 'react'
 import { useStore } from '@/lib/store/useStore'
 
 const FINISH_PALETTE = [
-  { id: '#eab308', label: 'Champagne Gold', label_fa: 'شامپاینی مات', hex: '#d6b88a' },
+  { id: '#eab308', label: 'Champagne Gold', label_fa: 'شامپاینی مات', hex: '#dfc08e' },
   { id: '#e2e8f0', label: 'Brushed Silver', label_fa: 'نقره‌ای برس‌خورده', hex: '#e2e8f0' },
   { id: '#d97706', label: 'Warm Bronze', label_fa: 'برنزی گرم', hex: '#b6864f' },
   { id: '#cbd5e1', label: 'Smoked Pewter', label_fa: 'دودی مات', hex: '#64748b' },
@@ -32,10 +32,10 @@ export default function ColorFilter({
               key={c.id}
               type="button"
               onClick={() => onSelectColor(active ? undefined : c.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs flex items-center gap-2 border transition-colors ${
+              className={`px-3 py-1.5 rounded-xl text-xs flex items-center gap-2 border transition-all ${
                 active
-                  ? 'bg-white/[0.08] border-[#d6b88a] text-[#f2f2f0] font-semibold'
-                  : 'bg-transparent border-white/10 text-[#9ca0ab] hover:border-white/25'
+                  ? 'bg-[#1b2030] border-[#dfc08e]/60 text-[#f4f4f6] font-semibold'
+                  : 'bg-[#0a0c14]/70 border-white/[0.08] text-[#979fb2] hover:border-white/20'
               }`}
             >
               <span

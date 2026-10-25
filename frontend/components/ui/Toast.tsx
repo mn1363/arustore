@@ -15,21 +15,21 @@ export default function ToastContainer() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className="pointer-events-auto rounded-xl bg-[#181a20] p-3.5 border border-white/10 flex items-start gap-3 shadow-xl animate-fade-in"
+          className="pointer-events-auto rounded-2xl glass-panel p-3.5 flex items-start gap-3 animate-modal-enter"
         >
           {toast.type === 'success' && (
-            <CheckCircle2 className="w-4 h-4 text-[#d6b88a] flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 text-[#dfc08e] flex-shrink-0 mt-0.5" />
           )}
           {toast.type === 'info' && (
-            <Info className="w-4 h-4 text-[#d4d6dc] flex-shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 text-[#7ea6e0] flex-shrink-0 mt-0.5" />
           )}
           {toast.type === 'error' && (
             <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
           )}
           <div className="flex-1 min-w-0">
-            <div className="text-xs sm:text-sm font-semibold text-[#f2f2f0]">{toast.title}</div>
+            <div className="text-xs sm:text-sm font-semibold text-[#f4f4f6]">{toast.title}</div>
             {toast.description && (
-              <div className="text-xs text-[#9ca0ab] mt-0.5 truncate">{toast.description}</div>
+              <div className="text-xs text-[#979fb2] mt-0.5 truncate">{toast.description}</div>
             )}
           </div>
           <button
