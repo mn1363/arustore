@@ -559,6 +559,26 @@ class PaymentLifecycleService:
                         f"Order in status '{ord_st}' (payment '{pay_st}') cannot initiate payment.",
                     )
 
+                # Block new attempts fail-closed while any attempt on this order requires reconciliation
+                recon_stmt = self._with_for_update_if_supported(
+                    select(PaymentAttempt.id)
+                    .where(
+                        PaymentAttempt.order_id == order_id,
+                        PaymentAttempt.status == "reconciliation_required",
+                    )
+                    .limit(1)
+                )
+                unresolved_recon_id = (
+                    await self.db.execute(recon_stmt)
+                ).scalar_one_or_none()
+                if unresolved_recon_id is not None:
+                    await self.db.rollback()
+                    raise PaymentContractError(
+                        409,
+                        "payment_reconciliation_pending",
+                        "Order has an unresolved payment requiring financial reconciliation; new payment attempts are blocked.",
+                    )
+
                 # Inspect any existing active attempt on this order
                 active_stmt = self._with_for_update_if_supported(
                     self._attempt_query().where(
@@ -805,8 +825,24 @@ class PaymentLifecycleService:
                         ),
                         False,
                     )
+                recon_exists = (
+                    await self.db.execute(
+                        select(PaymentAttempt.id)
+                        .where(
+                            PaymentAttempt.order_id == order_id,
+                            PaymentAttempt.status == "reconciliation_required",
+                        )
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
                 if self.db.in_transaction():
                     await self.db.rollback()
+                if recon_exists is not None:
+                    raise PaymentContractError(
+                        409,
+                        "payment_reconciliation_pending",
+                        "Order has an unresolved payment requiring financial reconciliation; new payment attempts are blocked.",
+                    )
                 raise PaymentContractError(
                     409,
                     "active_payment_attempt_exists",
@@ -874,6 +910,31 @@ class PaymentLifecycleService:
                             include_sandbox_token=True,
                         ),
                         created_new,
+                    )
+
+                expected_init_provider = (attempt.provider or "").strip()
+                actual_init_provider = (init_result.provider or "").strip()
+                if (
+                    not expected_init_provider
+                    or actual_init_provider != expected_init_provider
+                ):
+                    await self._lock_attempt_resources_in_canonical_order(
+                        attempt, order.promo_code
+                    )
+                    self._release_attempt_reservations_in_tx(attempt, finish_now)
+                    attempt.status = "failed"
+                    attempt.active_order_key = None
+                    attempt.settled_order_key = None
+                    attempt.failure_code = "provider_mismatch"
+                    attempt.failure_reason = (
+                        "Gateway session initialization returned a mismatched provider identity."
+                    )
+                    attempt.completed_at = finish_now
+                    await self.db.commit()
+                    raise PaymentContractError(
+                        502,
+                        "payment_session_init_failed",
+                        "Payment session initialization failed and reservations were released.",
                     )
 
                 if init_result.outcome == "definitive_failure":
@@ -1329,13 +1390,25 @@ class PaymentLifecycleService:
                         "Payment attempt not found for this order.",
                     )
 
+                expected_provider = (attempt.provider or "").strip()
+                actual_provider = (verification.provider or "").strip()
+                provider_matches = (
+                    bool(expected_provider) and actual_provider == expected_provider
+                )
+
                 # 1. Terminal attempt handling (idempotent replay vs contradictory outcome vs late capture)
                 if attempt.status == "succeeded":
+                    if not provider_matches:
+                        await self.db.rollback()
+                        raise PaymentContractError(
+                            409,
+                            "provider_mismatch",
+                            "Verification result provider does not match the payment attempt provider.",
+                        )
                     if verification.outcome == "succeeded":
                         if (
-                            verification.provider_transaction_id
-                            and attempt.provider_transaction_id
-                            and verification.provider_transaction_id
+                            not verification.provider_transaction_id
+                            or verification.provider_transaction_id
                             != attempt.provider_transaction_id
                         ):
                             await self.db.rollback()
@@ -1355,6 +1428,69 @@ class PaymentLifecycleService:
                         "Payment attempt has already succeeded and cannot change outcome.",
                     )
 
+                # 1b. Enforce strict provider identity consistency before trusting any non-succeeded transition
+                if not provider_matches:
+                    if verification.funds_captured_hint:
+                        if attempt.status == "reconciliation_required":
+                            attempt.active_order_key = None
+                            attempt.settled_order_key = None
+                            attempt.completed_at = attempt.completed_at or now_utc
+                            await self.db.commit()
+                            raise PaymentContractError(
+                                409,
+                                "reconciliation_required",
+                                "Verification provider mismatch with possible fund capture; order remains blocked pending reconciliation.",
+                            )
+                        if attempt.status in ("failed", "expired", "cancelled"):
+                            prev_status = str(attempt.status)
+                            attempt.status = "reconciliation_required"
+                            attempt.active_order_key = None
+                            attempt.settled_order_key = None
+                            attempt.failure_code = (
+                                f"provider_mismatch_after_{prev_status}"
+                            )
+                            attempt.failure_reason = (
+                                f"Verification provider '{actual_provider or 'unknown'}' did not match "
+                                f"attempt provider '{expected_provider}' while reporting possible fund capture."
+                            )
+                            attempt.completed_at = attempt.completed_at or now_utc
+                            await self.db.commit()
+                            raise PaymentContractError(
+                                409,
+                                "reconciliation_required",
+                                "Verification provider mismatch with possible fund capture; marked for financial reconciliation.",
+                            )
+
+                        await self._lock_attempt_resources_in_canonical_order(
+                            attempt, order.promo_code
+                        )
+                        if ensure_utc(attempt.expires_at) <= now_utc:  # type: ignore[operator]
+                            self._expire_attempt_in_tx(attempt, now_utc)
+                        else:
+                            self._release_attempt_reservations_in_tx(attempt, now_utc)
+                        attempt.status = "reconciliation_required"
+                        attempt.active_order_key = None
+                        attempt.settled_order_key = None
+                        attempt.failure_code = "provider_mismatch_reconciliation"
+                        attempt.failure_reason = (
+                            f"Verification provider '{actual_provider or 'unknown'}' did not match "
+                            f"attempt provider '{expected_provider}' while reporting possible fund capture."
+                        )
+                        attempt.completed_at = now_utc
+                        await self.db.commit()
+                        raise PaymentContractError(
+                            409,
+                            "reconciliation_required",
+                            "Verification provider mismatch with possible fund capture; marked for financial reconciliation.",
+                        )
+
+                    await self.db.rollback()
+                    raise PaymentContractError(
+                        409,
+                        "provider_mismatch",
+                        "Verification result provider does not match the payment attempt provider.",
+                    )
+
                 if attempt.status in (
                     "failed",
                     "expired",
@@ -1365,7 +1501,7 @@ class PaymentLifecycleService:
                         verification.outcome == "succeeded"
                         and verification.funds_captured_hint
                     ):
-                        prev_status = attempt.status
+                        prev_status = str(attempt.status)
                         attempt.status = "reconciliation_required"
                         attempt.active_order_key = None
                         attempt.settled_order_key = None
@@ -1376,11 +1512,12 @@ class PaymentLifecycleService:
                             attempt.provider_transaction_id = (
                                 verification.provider_transaction_id
                             )
-                        attempt.failure_code = f"late_capture_after_{prev_status}"
-                        attempt.failure_reason = (
-                            f"Capture reported after attempt was '{prev_status}'; "
-                            "manual financial reconciliation is required."
-                        )
+                        if prev_status != "reconciliation_required":
+                            attempt.failure_code = f"late_capture_after_{prev_status}"
+                            attempt.failure_reason = (
+                                f"Capture reported after attempt was '{prev_status}'; "
+                                "manual financial reconciliation is required."
+                            )
                         attempt.completed_at = attempt.completed_at or now_utc
                         await self.db.commit()
                         raise PaymentContractError(
@@ -1722,6 +1859,11 @@ class PaymentLifecycleService:
                     settled_attempt is not None
                     and settled_attempt.status == "succeeded"
                     and verification.outcome == "succeeded"
+                    and (verification.provider or "").strip()
+                    == (settled_attempt.provider or "").strip()
+                    and bool(verification.provider_transaction_id)
+                    and verification.provider_transaction_id
+                    == settled_attempt.provider_transaction_id
                 ):
                     return await self._reload_and_serialize(
                         attempt_id, order_id, include_sandbox_token=False

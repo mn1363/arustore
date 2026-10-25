@@ -1643,3 +1643,642 @@ async def test_16_adapter_session_init_definitive_vs_indeterminate_outcomes(
     assert resolve_ok.status_code == 200
     assert resolve_ok.json()["status"] == "succeeded"
 
+
+@pytest.mark.asyncio
+async def test_17_captured_amount_mismatch_reconciliation_blocks_new_attempts_and_preserves_idem_replay(
+    sandbox_env: SandboxTestEnv,
+) -> None:
+    ac = sandbox_env.client
+    async with sandbox_env.session_factory() as s:
+        p2 = (await s.execute(select(Product).where(Product.id == 2))).scalar_one()
+        p2.stock_quantity = 6
+        p2.in_stock = True
+        promo = Discount(
+            code="RECONMIS1",
+            discount_percent=10.0,
+            min_order_amount=10.0,
+            usage_limit=5,
+            used_count=0,
+            is_active=True,
+        )
+        s.add(promo)
+        await s.commit()
+        promo_id = promo.id
+
+    headers, _ = await register_customer(ac, "recon-block-1@arustore.ir", "09128000171")
+    ord_mis = await create_pending_order(
+        ac,
+        headers,
+        product_id=2,
+        quantity=2,
+        idempotency_key="ord-recon-mis-block",
+        promo_code="RECONMIS1",
+    )
+
+    class CapturedAmountMismatchAdapter(SandboxPaymentAdapter):
+        async def verify_attempt(
+            self, req: GatewayVerificationRequest
+        ) -> GatewayVerificationResult:
+            return GatewayVerificationResult(
+                outcome="succeeded",
+                provider="sandbox",
+                provider_transaction_id=f"SBX-RECONMIS-{req.attempt_number}",
+                verified_amount_toman=req.expected_amount_toman - 5_000,
+                currency_unit="toman",
+                funds_captured_hint=True,
+            )
+
+    sandbox_env.app.dependency_overrides[get_payment_adapter] = (
+        lambda: CapturedAmountMismatchAdapter(sandbox_env.settings)
+    )
+
+    init_orig = await ac.post(
+        f"/api/v1/orders/{ord_mis['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-recon-orig-key"},
+    )
+    assert init_orig.status_code == 201
+    att_orig = init_orig.json()
+
+    # 1. Trigger reconciliation_required via captured-amount-mismatch adapter
+    mis_res = await ac.post(
+        f"/api/v1/orders/{ord_mis['id']}/payment-attempts/{att_orig['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_orig["next_action"]["sandbox_token"],
+        },
+    )
+    assert mis_res.status_code == 409
+    assert mis_res.json()["code"] == "reconciliation_required"
+
+    async with sandbox_env.session_factory() as s:
+        inv_before = (
+            await s.execute(
+                select(InventoryReservation).where(
+                    InventoryReservation.order_id == ord_mis["id"]
+                )
+            )
+        ).scalars().all()
+        disc_before = (
+            await s.execute(
+                select(DiscountReservation).where(
+                    DiscountReservation.order_id == ord_mis["id"]
+                )
+            )
+        ).scalars().all()
+        assert len(inv_before) == 1
+        assert inv_before[0].status == "released"
+        inv_released_at_before = inv_before[0].released_at
+        assert len(disc_before) == 1
+        assert disc_before[0].status == "released"
+        disc_released_at_before = disc_before[0].released_at
+
+    # Restore normal adapter so any new initiation would succeed if not fail-closed
+    sandbox_env.app.dependency_overrides.pop(get_payment_adapter, None)
+
+    # 2 & 3. Attempt new payment initiation with different Idempotency-Keys (including concurrent calls)
+    r_new_1, r_new_2 = await asyncio.gather(
+        ac.post(
+            f"/api/v1/orders/{ord_mis['id']}/payment-attempts",
+            headers={**headers, "Idempotency-Key": "pay-recon-fresh-key-1"},
+        ),
+        ac.post(
+            f"/api/v1/orders/{ord_mis['id']}/payment-attempts",
+            headers={**headers, "Idempotency-Key": "pay-recon-fresh-key-2"},
+        ),
+    )
+    for r_new in (r_new_1, r_new_2):
+        assert r_new.status_code == 409
+        assert r_new.json()["code"] == "payment_reconciliation_pending"
+
+    # 4. Replay the original Idempotency-Key -> returns 200 with original reconciliation_required attempt
+    replay_orig = await ac.post(
+        f"/api/v1/orders/{ord_mis['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-recon-orig-key"},
+    )
+    assert replay_orig.status_code == 200
+    replay_body = replay_orig.json()
+    assert replay_body["id"] == att_orig["id"]
+    assert replay_body["attempt_number"] == att_orig["attempt_number"]
+    assert replay_body["status"] == "reconciliation_required"
+    assert replay_body["failure_code"] == "amount_mismatch_reconciliation"
+    assert replay_body["next_action"] is None
+
+    # Verify persisted database state across all tables
+    async with sandbox_env.session_factory() as s:
+        attempts_db = (
+            await s.execute(
+                select(PaymentAttempt).where(PaymentAttempt.order_id == ord_mis["id"])
+            )
+        ).scalars().all()
+        assert len(attempts_db) == 1
+        assert attempts_db[0].id == att_orig["id"]
+        assert attempts_db[0].status == "reconciliation_required"
+        assert attempts_db[0].active_order_key is None
+        assert attempts_db[0].settled_order_key is None
+
+        inv_after = (
+            await s.execute(
+                select(InventoryReservation).where(
+                    InventoryReservation.order_id == ord_mis["id"]
+                )
+            )
+        ).scalars().all()
+        assert len(inv_after) == 1
+        assert inv_after[0].status == "released"
+        assert inv_after[0].released_at == inv_released_at_before
+        assert inv_after[0].consumed_at is None
+
+        disc_after = (
+            await s.execute(
+                select(DiscountReservation).where(
+                    DiscountReservation.order_id == ord_mis["id"]
+                )
+            )
+        ).scalars().all()
+        assert len(disc_after) == 1
+        assert disc_after[0].status == "released"
+        assert disc_after[0].released_at == disc_released_at_before
+        assert disc_after[0].consumed_at is None
+
+        p2_db = (await s.execute(select(Product).where(Product.id == 2))).scalar_one()
+        assert p2_db.stock_quantity == 6
+
+        promo_db = (
+            await s.execute(select(Discount).where(Discount.id == promo_id))
+        ).scalar_one()
+        assert promo_db.used_count == 0
+
+        ord_db = (
+            await s.execute(select(Order).where(Order.id == ord_mis["id"]))
+        ).scalar_one()
+        assert ord_db.status == "pending_payment"
+        assert ord_db.payment_status == "pending"
+        assert ord_db.payment_reference is None
+
+        hist_db = (
+            await s.execute(
+                select(OrderStatusHistory)
+                .where(OrderStatusHistory.order_id == ord_mis["id"])
+                .order_by(OrderStatusHistory.id.asc())
+            )
+        ).scalars().all()
+        assert [h.status for h in hist_db] == ["pending_payment"]
+
+
+@pytest.mark.asyncio
+async def test_18_late_capture_after_expiry_reconciliation_blocks_new_attempts(
+    sandbox_env: SandboxTestEnv,
+) -> None:
+    ac = sandbox_env.client
+    async with sandbox_env.session_factory() as s:
+        p3 = (await s.execute(select(Product).where(Product.id == 3))).scalar_one()
+        p3.stock_quantity = 4
+        p3.in_stock = True
+        promo = Discount(
+            code="RECONEXP1",
+            discount_percent=10.0,
+            min_order_amount=10.0,
+            usage_limit=3,
+            used_count=0,
+            is_active=True,
+        )
+        s.add(promo)
+        await s.commit()
+        promo_id = promo.id
+
+    headers, _ = await register_customer(ac, "recon-exp-1@arustore.ir", "09128000181")
+    ord_exp = await create_pending_order(
+        ac,
+        headers,
+        product_id=3,
+        quantity=1,
+        idempotency_key="ord-recon-exp-block",
+        promo_code="RECONEXP1",
+    )
+
+    init_res = await ac.post(
+        f"/api/v1/orders/{ord_exp['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-exp-orig-key"},
+    )
+    assert init_res.status_code == 201
+    att_exp = init_res.json()
+
+    # Advance past reservation TTL
+    sandbox_env.advance(910)
+
+    class LateCapturedAfterExpiryAdapter(SandboxPaymentAdapter):
+        async def verify_attempt(
+            self, req: GatewayVerificationRequest
+        ) -> GatewayVerificationResult:
+            return GatewayVerificationResult(
+                outcome="succeeded",
+                provider="sandbox",
+                provider_transaction_id=f"SBX-EXP-CAP-{req.attempt_number}",
+                verified_amount_toman=req.expected_amount_toman,
+                currency_unit="toman",
+                funds_captured_hint=True,
+            )
+
+    sandbox_env.app.dependency_overrides[get_payment_adapter] = (
+        lambda: LateCapturedAfterExpiryAdapter(sandbox_env.settings)
+    )
+
+    # Trigger late-capture-after-expiry reconciliation_required
+    late_res = await ac.post(
+        f"/api/v1/orders/{ord_exp['id']}/payment-attempts/{att_exp['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_exp["next_action"]["sandbox_token"],
+        },
+    )
+    assert late_res.status_code == 409
+    assert late_res.json()["code"] == "reconciliation_required"
+
+    sandbox_env.app.dependency_overrides.pop(get_payment_adapter, None)
+
+    # Fresh Idempotency-Key MUST be blocked with 409 payment_reconciliation_pending
+    retry_new = await ac.post(
+        f"/api/v1/orders/{ord_exp['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-exp-fresh-key"},
+    )
+    assert retry_new.status_code == 409
+    assert retry_new.json()["code"] == "payment_reconciliation_pending"
+
+    # Original Idempotency-Key replay returns the existing reconciliation_required attempt
+    replay_orig = await ac.post(
+        f"/api/v1/orders/{ord_exp['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-exp-orig-key"},
+    )
+    assert replay_orig.status_code == 200
+    assert replay_orig.json()["id"] == att_exp["id"]
+    assert replay_orig.json()["status"] == "reconciliation_required"
+    assert replay_orig.json()["failure_code"] == "late_capture_after_expiry"
+
+    # Verify persisted DB state
+    async with sandbox_env.session_factory() as s:
+        attempts_db = (
+            await s.execute(
+                select(PaymentAttempt).where(PaymentAttempt.order_id == ord_exp["id"])
+            )
+        ).scalars().all()
+        assert len(attempts_db) == 1
+        assert attempts_db[0].status == "reconciliation_required"
+        assert attempts_db[0].failure_code == "late_capture_after_expiry"
+
+        inv_db = (
+            await s.execute(
+                select(InventoryReservation).where(
+                    InventoryReservation.order_id == ord_exp["id"]
+                )
+            )
+        ).scalars().all()
+        assert len(inv_db) == 1
+        assert inv_db[0].status == "expired"
+
+        disc_db = (
+            await s.execute(
+                select(DiscountReservation).where(
+                    DiscountReservation.order_id == ord_exp["id"]
+                )
+            )
+        ).scalars().all()
+        assert len(disc_db) == 1
+        assert disc_db[0].status == "expired"
+
+        p3_db = (await s.execute(select(Product).where(Product.id == 3))).scalar_one()
+        assert p3_db.stock_quantity == 4
+
+        promo_db = (
+            await s.execute(select(Discount).where(Discount.id == promo_id))
+        ).scalar_one()
+        assert promo_db.used_count == 0
+
+        ord_db = (
+            await s.execute(select(Order).where(Order.id == ord_exp["id"]))
+        ).scalar_one()
+        assert ord_db.status == "pending_payment"
+        assert ord_db.payment_status == "pending"
+        assert ord_db.payment_reference is None
+
+        hist_db = (
+            await s.execute(
+                select(OrderStatusHistory)
+                .where(OrderStatusHistory.order_id == ord_exp["id"])
+                .order_by(OrderStatusHistory.id.asc())
+            )
+        ).scalars().all()
+        assert [h.status for h in hist_db] == ["pending_payment"]
+
+
+@pytest.mark.asyncio
+async def test_19_provider_mismatch_verification_never_settles_and_capture_hint_blocks_retries(
+    sandbox_env: SandboxTestEnv,
+) -> None:
+    ac = sandbox_env.client
+    async with sandbox_env.session_factory() as s:
+        p1 = (await s.execute(select(Product).where(Product.id == 1))).scalar_one()
+        p1.stock_quantity = 10
+        p1.in_stock = True
+        promo = Discount(
+            code="PROVMIS1",
+            discount_percent=10.0,
+            min_order_amount=10.0,
+            usage_limit=5,
+            used_count=0,
+            is_active=True,
+        )
+        s.add(promo)
+        await s.commit()
+        promo_id = promo.id
+
+    headers, _ = await register_customer(ac, "prov-mis@arustore.ir", "09128000191")
+
+    # Part A: Non-captured provider-mismatched 'succeeded' result -> rejected (409 provider_mismatch), never settles!
+    ord_nc = await create_pending_order(
+        ac,
+        headers,
+        product_id=1,
+        quantity=2,
+        idempotency_key="ord-prov-mis-nc",
+        promo_code="PROVMIS1",
+    )
+    init_nc = await ac.post(
+        f"/api/v1/orders/{ord_nc['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-prov-mis-nc"},
+    )
+    assert init_nc.status_code == 201
+    att_nc = init_nc.json()
+
+    class UncapturedWrongProviderAdapter(SandboxPaymentAdapter):
+        async def verify_attempt(
+            self, req: GatewayVerificationRequest
+        ) -> GatewayVerificationResult:
+            return GatewayVerificationResult(
+                outcome="succeeded",
+                provider="rogue_gateway",
+                provider_transaction_id=f"ROGUE-TXN-{req.attempt_number}",
+                verified_amount_toman=req.expected_amount_toman,
+                currency_unit="toman",
+                funds_captured_hint=False,
+            )
+
+    sandbox_env.app.dependency_overrides[get_payment_adapter] = (
+        lambda: UncapturedWrongProviderAdapter(sandbox_env.settings)
+    )
+
+    nc_res = await ac.post(
+        f"/api/v1/orders/{ord_nc['id']}/payment-attempts/{att_nc['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_nc["next_action"]["sandbox_token"],
+        },
+    )
+    assert nc_res.status_code == 409
+    assert nc_res.json()["code"] == "provider_mismatch"
+
+    # Verify DB state after uncaptured wrong-provider result: zero settlement, attempt still pending on 'sandbox'
+    async with sandbox_env.session_factory() as s:
+        att_nc_db = (
+            await s.execute(
+                select(PaymentAttempt).where(PaymentAttempt.id == att_nc["id"])
+            )
+        ).scalar_one()
+        assert att_nc_db.provider == "sandbox"
+        assert att_nc_db.status == "pending"
+        assert att_nc_db.settled_order_key is None
+        assert att_nc_db.provider_transaction_id is None
+
+        inv_nc_db = (
+            await s.execute(
+                select(InventoryReservation).where(
+                    InventoryReservation.payment_attempt_id == att_nc["id"]
+                )
+            )
+        ).scalar_one()
+        assert inv_nc_db.status == "active"
+        assert inv_nc_db.consumed_at is None
+
+        disc_nc_db = (
+            await s.execute(
+                select(DiscountReservation).where(
+                    DiscountReservation.payment_attempt_id == att_nc["id"]
+                )
+            )
+        ).scalar_one()
+        assert disc_nc_db.status == "active"
+        assert disc_nc_db.consumed_at is None
+
+        p1_db = (await s.execute(select(Product).where(Product.id == 1))).scalar_one()
+        assert p1_db.stock_quantity == 10
+
+        promo_db = (
+            await s.execute(select(Discount).where(Discount.id == promo_id))
+        ).scalar_one()
+        assert promo_db.used_count == 0
+
+        ord_nc_db = (
+            await s.execute(select(Order).where(Order.id == ord_nc["id"]))
+        ).scalar_one()
+        assert ord_nc_db.status == "pending_payment"
+        assert ord_nc_db.payment_status == "pending"
+        assert ord_nc_db.payment_reference is None
+
+        hist_nc_db = (
+            await s.execute(
+                select(OrderStatusHistory)
+                .where(OrderStatusHistory.order_id == ord_nc["id"])
+                .order_by(OrderStatusHistory.id.asc())
+            )
+        ).scalars().all()
+        assert [h.status for h in hist_nc_db] == ["pending_payment"]
+
+    # Restore legitimate sandbox adapter -> settles cleanly once, and consistent replay returns 200 while wrong-provider replay fails 409!
+    sandbox_env.app.dependency_overrides.pop(get_payment_adapter, None)
+    legit_settle = await ac.post(
+        f"/api/v1/orders/{ord_nc['id']}/payment-attempts/{att_nc['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_nc["next_action"]["sandbox_token"],
+        },
+    )
+    assert legit_settle.status_code == 200
+    assert legit_settle.json()["status"] == "succeeded"
+
+    legit_replay = await ac.post(
+        f"/api/v1/orders/{ord_nc['id']}/payment-attempts/{att_nc['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_nc["next_action"]["sandbox_token"],
+        },
+    )
+    assert legit_replay.status_code == 200
+    assert legit_replay.json()["id"] == att_nc["id"]
+
+    sandbox_env.app.dependency_overrides[get_payment_adapter] = (
+        lambda: UncapturedWrongProviderAdapter(sandbox_env.settings)
+    )
+    wrong_replay = await ac.post(
+        f"/api/v1/orders/{ord_nc['id']}/payment-attempts/{att_nc['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_nc["next_action"]["sandbox_token"],
+        },
+    )
+    assert wrong_replay.status_code == 409
+    assert wrong_replay.json()["code"] == "provider_mismatch"
+    sandbox_env.app.dependency_overrides.pop(get_payment_adapter, None)
+
+    # Part B: Provider-mismatched result WITH funds_captured_hint=True -> enters reconciliation_required and blocks new attempts!
+    ord_cap = await create_pending_order(
+        ac,
+        headers,
+        product_id=1,
+        quantity=1,
+        idempotency_key="ord-prov-mis-cap",
+        promo_code="PROVMIS1",
+    )
+    init_cap = await ac.post(
+        f"/api/v1/orders/{ord_cap['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-prov-cap-orig"},
+    )
+    assert init_cap.status_code == 201
+    att_cap = init_cap.json()
+
+    class CapturedWrongProviderAdapter(SandboxPaymentAdapter):
+        async def verify_attempt(
+            self, req: GatewayVerificationRequest
+        ) -> GatewayVerificationResult:
+            return GatewayVerificationResult(
+                outcome="succeeded",
+                provider="rogue_gateway",
+                provider_transaction_id=f"ROGUE-CAP-{req.attempt_number}",
+                verified_amount_toman=req.expected_amount_toman,
+                currency_unit="toman",
+                funds_captured_hint=True,
+            )
+
+    sandbox_env.app.dependency_overrides[get_payment_adapter] = (
+        lambda: CapturedWrongProviderAdapter(sandbox_env.settings)
+    )
+
+    cap_mis_res = await ac.post(
+        f"/api/v1/orders/{ord_cap['id']}/payment-attempts/{att_cap['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_cap["next_action"]["sandbox_token"],
+        },
+    )
+    assert cap_mis_res.status_code == 409
+    assert cap_mis_res.json()["code"] == "reconciliation_required"
+
+    # Repeat mismatched capture hint on already reconciliation_required attempt -> preserves reconciliation_required state safely
+    cap_mis_repeat = await ac.post(
+        f"/api/v1/orders/{ord_cap['id']}/payment-attempts/{att_cap['id']}/sandbox-resolve",
+        headers=headers,
+        json={
+            "outcome": "succeeded",
+            "sandbox_token": att_cap["next_action"]["sandbox_token"],
+        },
+    )
+    assert cap_mis_repeat.status_code == 409
+    assert cap_mis_repeat.json()["code"] == "reconciliation_required"
+
+    sandbox_env.app.dependency_overrides.pop(get_payment_adapter, None)
+
+    # Unresolved order MUST remain blocked against new payment attempts!
+    blocked_retry = await ac.post(
+        f"/api/v1/orders/{ord_cap['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-prov-cap-fresh"},
+    )
+    assert blocked_retry.status_code == 409
+    assert blocked_retry.json()["code"] == "payment_reconciliation_pending"
+
+    # Replay of original Idempotency-Key returns the existing reconciliation_required attempt
+    replay_cap = await ac.post(
+        f"/api/v1/orders/{ord_cap['id']}/payment-attempts",
+        headers={**headers, "Idempotency-Key": "pay-prov-cap-orig"},
+    )
+    assert replay_cap.status_code == 200
+    assert replay_cap.json()["id"] == att_cap["id"]
+    assert replay_cap.json()["status"] == "reconciliation_required"
+
+    # Verify persisted DB state for ord_cap
+    async with sandbox_env.session_factory() as s:
+        cap_attempts = (
+            await s.execute(
+                select(PaymentAttempt).where(PaymentAttempt.order_id == ord_cap["id"])
+            )
+        ).scalars().all()
+        assert len(cap_attempts) == 1
+        assert cap_attempts[0].provider == "sandbox"
+        assert cap_attempts[0].status == "reconciliation_required"
+        assert cap_attempts[0].failure_code == "provider_mismatch_reconciliation"
+        assert cap_attempts[0].active_order_key is None
+        assert cap_attempts[0].settled_order_key is None
+        assert cap_attempts[0].provider_transaction_id is None
+
+        inv_cap_db = (
+            await s.execute(
+                select(InventoryReservation).where(
+                    InventoryReservation.order_id == ord_cap["id"]
+                )
+            )
+        ).scalars().all()
+        assert len(inv_cap_db) == 1
+        assert inv_cap_db[0].status == "released"
+        assert inv_cap_db[0].consumed_at is None
+
+        disc_cap_db = (
+            await s.execute(
+                select(DiscountReservation).where(
+                    DiscountReservation.order_id == ord_cap["id"]
+                )
+            )
+        ).scalars().all()
+        assert len(disc_cap_db) == 1
+        assert disc_cap_db[0].status == "released"
+        assert disc_cap_db[0].consumed_at is None
+
+        p1_after = (
+            await s.execute(select(Product).where(Product.id == 1))
+        ).scalar_one()
+        assert p1_after.stock_quantity == 8  # Only ord_nc's 2 units deducted; ord_cap's 1 unit NOT deducted!
+
+        promo_after = (
+            await s.execute(select(Discount).where(Discount.id == promo_id))
+        ).scalar_one()
+        assert promo_after.used_count == 1  # Only ord_nc consumed promo; ord_cap did NOT!
+
+        usage_cap_cnt = (
+            await s.execute(
+                select(func.count(DiscountUsage.id)).where(
+                    DiscountUsage.order_id == ord_cap["id"]
+                )
+            )
+        ).scalar_one()
+        assert usage_cap_cnt == 0
+
+        ord_cap_db = (
+            await s.execute(select(Order).where(Order.id == ord_cap["id"]))
+        ).scalar_one()
+        assert ord_cap_db.status == "pending_payment"
+        assert ord_cap_db.payment_status == "pending"
+        assert ord_cap_db.payment_reference is None
+
+        hist_cap_db = (
+            await s.execute(
+                select(OrderStatusHistory)
+                .where(OrderStatusHistory.order_id == ord_cap["id"])
+                .order_by(OrderStatusHistory.id.asc())
+            )
+        ).scalars().all()
+        assert [h.status for h in hist_cap_db] == ["pending_payment"]
+
+
