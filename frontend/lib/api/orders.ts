@@ -237,14 +237,21 @@ export function getAllowedAdminOrderStatusOptions(
     return makeOptions(['pending_payment', 'cancelled'])
   }
 
-  // Paid orders cannot revert to `pending_payment`
-  if (order.status === 'delivered') {
-    return makeOptions(['delivered'])
+  // Paid orders follow strict sequential fulfillment and never revert to `pending_payment`
+  switch (order.status) {
+    case 'pending_payment':
+      return makeOptions(['processing', 'cancelled'])
+    case 'processing':
+      return makeOptions(['processing', 'shipped', 'cancelled'])
+    case 'shipped':
+      return makeOptions(['shipped', 'delivered', 'cancelled'])
+    case 'delivered':
+      return makeOptions(['delivered'])
+    case 'cancelled':
+      return makeOptions(['cancelled'])
+    default:
+      return []
   }
-  if (order.status === 'shipped') {
-    return makeOptions(['shipped', 'delivered', 'cancelled'])
-  }
-  return makeOptions(['processing', 'shipped', 'delivered', 'cancelled'])
 }
 
 export async function fetchServerOrders(): Promise<ServerOrder[]> {

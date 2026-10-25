@@ -53,11 +53,11 @@ def _compute_cart_hash(cart_rows: Sequence[CartItem]) -> str:
 
 
 PAID_ALLOWED_NEXT_STATUSES: Dict[str, set[str]] = {
-    "processing": {"processing", "shipped", "delivered", "cancelled"},
+    "pending_payment": {"processing", "cancelled"},
+    "processing": {"processing", "shipped", "cancelled"},
     "shipped": {"shipped", "delivered", "cancelled"},
     "delivered": {"delivered"},
     "cancelled": {"cancelled"},
-    "pending_payment": {"processing", "shipped", "delivered", "cancelled"},
 }
 
 
@@ -435,8 +435,7 @@ class OrderService:
                     detail="Paid orders cannot transition back to 'pending_payment'.",
                 )
             allowed_targets = PAID_ALLOWED_NEXT_STATUSES.get(
-                current_status,
-                {"processing", "shipped", "delivered", "cancelled"},
+                current_status, set()
             )
             if target_status not in allowed_targets:
                 raise HTTPException(

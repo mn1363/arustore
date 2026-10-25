@@ -845,17 +845,19 @@ test('7. Admin status options enforce payment-state transitions and createServer
   ).map((o) => o.value)
   assert.deepEqual(unpaidCancelledOpts, ['cancelled'])
 
-  // Paid order can transition along fulfillment states and NEVER back to pending_payment
+  // Paid order follows strict sequential fulfillment and NEVER reverts to pending_payment or skips stages
+  const paidPendingOpts = getAllowedAdminOrderStatusOptions(
+    { status: 'pending_payment', paymentStatus: 'paid' },
+    'en'
+  ).map((o) => o.value)
+  assert.deepEqual(paidPendingOpts, ['processing', 'cancelled'])
+
   const paidProcessingOpts = getAllowedAdminOrderStatusOptions(
     { status: 'processing', paymentStatus: 'paid' },
     'en'
   ).map((o) => o.value)
-  assert.deepEqual(paidProcessingOpts, [
-    'processing',
-    'shipped',
-    'delivered',
-    'cancelled',
-  ])
+  assert.deepEqual(paidProcessingOpts, ['processing', 'shipped', 'cancelled'])
+  assert.equal(paidProcessingOpts.includes('delivered'), false)
   assert.equal(paidProcessingOpts.includes('pending_payment'), false)
 
   const paidShippedOpts = getAllowedAdminOrderStatusOptions(
@@ -863,12 +865,19 @@ test('7. Admin status options enforce payment-state transitions and createServer
     'en'
   ).map((o) => o.value)
   assert.deepEqual(paidShippedOpts, ['shipped', 'delivered', 'cancelled'])
+  assert.equal(paidShippedOpts.includes('processing'), false)
 
   const paidDeliveredOpts = getAllowedAdminOrderStatusOptions(
     { status: 'delivered', paymentStatus: 'paid' },
     'en'
   ).map((o) => o.value)
   assert.deepEqual(paidDeliveredOpts, ['delivered'])
+
+  const paidCancelledOpts = getAllowedAdminOrderStatusOptions(
+    { status: 'cancelled', paymentStatus: 'paid' },
+    'en'
+  ).map((o) => o.value)
+  assert.deepEqual(paidCancelledOpts, ['cancelled'])
 
   // Client API helper rejects blank / whitespace / >128-char Idempotency-Key before network call
   for (const invalidKey of ['', '   ', 'x'.repeat(129)]) {

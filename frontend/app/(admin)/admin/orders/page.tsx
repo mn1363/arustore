@@ -112,7 +112,19 @@ export default function AdminOrdersPage() {
               order,
               locale
             )
-            const isTerminalOrLocked = allowedOptions.length <= 1
+            const currentValueAllowed = allowedOptions.some(
+              (opt) => opt.value === order.status
+            )
+            const isTerminalOrLocked =
+              allowedOptions.length === 0 ||
+              (allowedOptions.length === 1 && currentValueAllowed)
+            const placeholderLabel = !currentValueAllowed
+              ? order.status === 'pending_payment'
+                ? locale === 'fa'
+                  ? 'در انتظار پرداخت (انتخاب مرحله)'
+                  : 'Pending Payment (Select status)'
+                : order.status
+              : undefined
 
             return (
               <div
@@ -153,10 +165,11 @@ export default function AdminOrdersPage() {
 
                 <div className="w-56 space-y-1">
                   <Select
-                    value={order.status}
+                    value={currentValueAllowed ? order.status : ''}
+                    placeholder={placeholderLabel}
                     disabled={updatingId === order.id || isTerminalOrLocked}
                     onChange={(e) => {
-                      if (e.target.value !== order.status) {
+                      if (e.target.value && e.target.value !== order.status) {
                         void handleStatusChange(order.id, e.target.value)
                       }
                     }}

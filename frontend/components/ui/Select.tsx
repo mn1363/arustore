@@ -3,10 +3,11 @@ import { cn } from '@/lib/utils'
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
+  placeholder?: string
   options: { value: string; label: string }[]
 }
 
-export default function Select({ label, options, className, ...props }: SelectProps) {
+export default function Select({ label, placeholder, options, className, ...props }: SelectProps) {
   return (
     <div className="space-y-1.5">
       {label && <label className="block text-xs font-medium text-[#b4b8c2]">{label}</label>}
@@ -17,6 +18,11 @@ export default function Select({ label, options, className, ...props }: SelectPr
         )}
         {...props}
       >
+        {placeholder && (
+          <option value="" disabled className="bg-[#14161a] text-[#979fb2]">
+            {placeholder}
+          </option>
+        )}
         {options.map((opt) => (
           <option key={opt.value} value={opt.value} className="bg-[#14161a] text-white">
             {opt.label}

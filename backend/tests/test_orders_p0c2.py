@@ -767,6 +767,15 @@ async def test_16_payment_aware_admin_status_transitions_history_and_rbac(
         json={"status": "pending_payment"},
     )
     assert revert_res.status_code == 409
+
+    # Sequential rule 1: Paid `processing` -> `delivered` (skipping `shipped`) is rejected with 409
+    skip_to_delivered = await client.patch(
+        f"/api/v1/admin/orders/{paid_order_id}/status",
+        headers=admin_headers,
+        json={"status": "delivered", "note": "Attempted stage skip"},
+    )
+    assert skip_to_delivered.status_code == 409
+
     paid_check = (
         await client.get(
             f"/api/v1/orders/{paid_order_id}", headers=admin_headers
@@ -775,7 +784,7 @@ async def test_16_payment_aware_admin_status_transitions_history_and_rbac(
     assert paid_check["status"] == "processing"
     assert len(paid_check["status_history"]) == 1
 
-    # 4. Paid historical order CAN follow valid fulfillment transitions: processing -> shipped -> delivered
+    # Sequential rule 2: Paid `processing` -> `shipped` succeeds
     ship_res = await client.patch(
         f"/api/v1/admin/orders/{paid_order_id}/status",
         headers=admin_headers,
@@ -802,6 +811,7 @@ async def test_16_payment_aware_admin_status_transitions_history_and_rbac(
         )
     ).status_code == 409
 
+    # Sequential rule 3: Paid `shipped` -> `delivered` succeeds
     deliver_res = await client.patch(
         f"/api/v1/admin/orders/{paid_order_id}/status",
         headers=admin_headers,
@@ -815,4 +825,123 @@ async def test_16_payment_aware_admin_status_transitions_history_and_rbac(
         "shipped",
         "delivered",
     ]
+
+    # Terminal `delivered` cannot transition to processing, shipped, cancelled, or pending_payment -> 409
+    for forbidden_from_delivered in (
+        "pending_payment",
+        "processing",
+        "shipped",
+        "cancelled",
+    ):
+        assert (
+            await client.patch(
+                f"/api/v1/admin/orders/{paid_order_id}/status",
+                headers=admin_headers,
+                json={"status": forbidden_from_delivered},
+            )
+        ).status_code == 409
+    assert (
+        len(
+            (
+                await client.get(
+                    f"/api/v1/orders/{paid_order_id}", headers=admin_headers
+                )
+            ).json()["status_history"]
+        )
+        == 3
+    )
+
+    # Sequential rules 4 & 5: Paid `pending_payment` order rejects `shipped`, `delivered`, and `pending_payment` (409),
+    # and allows ONLY `processing` or `cancelled`!
+    async for session in override_get_db():
+        paid_pending_a = Order(
+            order_number="ARU-2025-PAIDPEND-A",
+            user_id=customer_id,
+            status="pending_payment",
+            payment_status="paid",
+            payment_reference="ARU-PAY-HIST-9002",
+            subtotal=95.0,
+            discount_amount=0.0,
+            shipping_cost=0.0,
+            total=95.0,
+            total_toman=5_225_000,
+            customer_name="Paid Pending Buyer A",
+            shipping_address="Tehran Vanak Sq 5",
+        )
+        paid_pending_a.status_history.append(
+            OrderStatusHistory(
+                status="pending_payment",
+                note="Initial pending record later settled",
+            )
+        )
+        paid_pending_b = Order(
+            order_number="ARU-2025-PAIDPEND-B",
+            user_id=customer_id,
+            status="pending_payment",
+            payment_status="paid",
+            payment_reference="ARU-PAY-HIST-9003",
+            subtotal=95.0,
+            discount_amount=0.0,
+            shipping_cost=0.0,
+            total=95.0,
+            total_toman=5_225_000,
+            customer_name="Paid Pending Buyer B",
+            shipping_address="Tehran Vanak Sq 6",
+        )
+        paid_pending_b.status_history.append(
+            OrderStatusHistory(
+                status="pending_payment",
+                note="Initial pending record later settled",
+            )
+        )
+        session.add_all([paid_pending_a, paid_pending_b])
+        await session.commit()
+        paid_pending_a_id = paid_pending_a.id
+        paid_pending_b_id = paid_pending_b.id
+
+    for skipped_status in ("shipped", "delivered", "pending_payment"):
+        skip_res = await client.patch(
+            f"/api/v1/admin/orders/{paid_pending_a_id}/status",
+            headers=admin_headers,
+            json={"status": skipped_status, "note": "Should reject skip"},
+        )
+        assert skip_res.status_code == 409, (skipped_status, skip_res.text)
+
+    # Verify status & history remain untouched after rejected attempts on paid_pending_a
+    untouched_a = (
+        await client.get(
+            f"/api/v1/orders/{paid_pending_a_id}", headers=admin_headers
+        )
+    ).json()
+    assert untouched_a["status"] == "pending_payment"
+    assert len(untouched_a["status_history"]) == 1
+
+    # Paid `pending_payment` -> `processing` succeeds (200)
+    advance_to_proc = await client.patch(
+        f"/api/v1/admin/orders/{paid_pending_a_id}/status",
+        headers=admin_headers,
+        json={"status": "processing", "note": "Entered atelier preparation"},
+    )
+    assert advance_to_proc.status_code == 200
+    assert advance_to_proc.json()["status"] == "processing"
+    assert [
+        h["status"] for h in advance_to_proc.json()["status_history"]
+    ] == ["pending_payment", "processing"]
+
+    # Paid `pending_payment` -> `cancelled` succeeds (200) and is terminal thereafter
+    cancel_paid_pending = await client.patch(
+        f"/api/v1/admin/orders/{paid_pending_b_id}/status",
+        headers=admin_headers,
+        json={"status": "cancelled", "note": "Cancelled prior to processing"},
+    )
+    assert cancel_paid_pending.status_code == 200
+    assert cancel_paid_pending.json()["status"] == "cancelled"
+    for after_cancel_target in ("pending_payment", "processing", "shipped", "delivered"):
+        assert (
+            await client.patch(
+                f"/api/v1/admin/orders/{paid_pending_b_id}/status",
+                headers=admin_headers,
+                json={"status": after_cancel_target},
+            )
+        ).status_code == 409
 
